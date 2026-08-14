@@ -1,0 +1,22 @@
+# Copy to tickers.yaml and replace with real holdings.
+# No thesis / no kpis → the poller must refuse to watch the name.
+
+- symbol: SUZLON
+  bse_code: "532667"
+  nse_symbol: SUZLON
+  status: held                 # held | watchlist
+  sector: wind                 # optional; v1 industry factor uses peer tags
+  qty: 0
+  avg_cost: 0
+  confidence: 70               # 0–100; disagreement flag, not inside S
+  review_by: 2026-11-15
+  # results_due: 2026-08-20    # optional; else parsed from board-meeting intimations
+  thesis: >
+    Two sentences. Why this position exists.
+  kpis:
+    - name: deliveries_mw
+      label: Quarterly deliveries (MW)
+      check: Investor presentation
+    - name: order_book_gw
+      label: Order book (GW)
+      check: Quarterly disclosure + order announcements

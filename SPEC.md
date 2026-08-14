@@ -1,0 +1,218 @@
+# Positional Awareness
+
+Personal, single-user tool. Stay involved with holdings over time without re-learning the business. Each name keeps its thesis and KPI history on the row. When facts change, you get a **direct add / hold / trim** with the arithmetic shown. **You click Groww.** This agent never places orders.
+
+This is not a scanner, not a broker, not a Nifty-alpha engine, not a news-sentiment firehose.
+
+---
+
+## 1. Job
+
+You buy for a reason, then the name stays in the book and the reason evaporates. This tool:
+
+- Keeps **thesis + 1–3 named KPIs** (revenue, PAT, deliveries, order book, …) on each row, with a quarter-by-quarter series.
+- Wakes you when earnings are a few days out, and when a print/order/news/price move would change what to do.
+- Recommends **add / hold / trim** from a frozen, visible scorecard.
+- Lets you pre-position before results **if you are already confident**, or wait with one KPI in mind and act after confirmation.
+
+Involvement ≠ more trades. Default is Hold. A quiet week is success.
+
+Expected cadence for ~10 names: glance at prints (~40/year, most Hold); **hard add/trim a handful of times a year**; optional earnings plays on 0–1 names per results week. Do not nag daily.
+
+---
+
+## 2. Non-goals (do not build)
+
+- Broker order placement (Groww/Kite). Read-only holdings later; v1 is hand-entered qty/cost.
+- Live streaming prices, websockets, RSI/MACD stacks.
+- **Nifty-relative / excess-return alpha.** This book is allowed to diverge from the index. Price factor is the **name’s own move**.
+- Multi-user, auth, deploy-for-others.
+- Predicted beats/misses. No “the model thinks the quarter will beat.”
+- Screening / stock discovery.
+- Twitter / broker-target / mood APIs.
+- Tuning scorecard weights in beta.
+- **Telegram in v1.** CLI + macOS notifications first. Telegram is a later push channel, not a blocker.
+- **Web UI in v1.** No FastAPI page until the pipe works.
+- NSE source unless a name is NSE-only (BSE covers dual-listed).
+- Local Ollama (16 GB M5; do not slow the laptop). Gemini API (key already exists). Groq+Llama optional fallback.
+
+---
+
+## 3. Beta scorecard (frozen — do not tune)
+
+```
+S = 0.40·x_kpi + 0.20·x_book + 0.15·x_industry + 0.15·x_price + 0.10·x_guidance
+```
+
+Each `x` ∈ [−1, +1].
+
+| Factor | w | Raw | Normalization |
+|---|---|---|---|
+| Thesis KPI print | 0.40 | QoQ % of the named KPI(s) from results/PPT | Winsorize at ±25%, then `/ 0.25` |
+| Order book / ops filings | 0.20 | Book YoY % or order vs quarterly sales | Same winsorize; one-off order: `sign * min(1, order/q_sales)` |
+| Industry | 0.15 | **v1: peer prints** from other ledger names with the same sector tag. RSS news later. | Mean of peer KPI z vs their own history. Unrelated = 0 |
+| Own price | 0.15 | 20-day return of **this name**. Alert if \|1d\| > 3% or \|5d\| > 8% | Winsorize at ±15%, then `/ 0.15`. **Not vs Nifty** |
+| Guidance | 0.10 | PPT/con-call vs last guidance, **only if it names your KPI** | LLM maps to {−1, 0, +1}. Else 0 |
+
+**Not inside S**
+
+- **Your confidence (0–100):** disagreement flag. If mapped S vs stamp differs by > 25 points, say so. Do not mix a stale 80% into S (it blocks a broken KPI).
+- **Position weight:** action *modifier*. Lean-add on a name already ≥ **20%** of the book → do not add. Lean-trim on a large weight → stronger trim.
+- **Days to results:** switches the message (pack vs post-print). Does not change S.
+- **`needs_manual_read`:** blocks Buy until the user confirms the number.
+
+**S → recommendation**
+
+| S | Verb |
+|---|---|
+| ≥ +0.60 | Buy / add |
+| +0.25 to +0.60 | Hold, lean add (pre-position only if results are inside a few days) |
+| −0.25 to +0.25 | Hold |
+| −0.60 to −0.25 | Hold, lean trim |
+| ≤ −0.60 | Sell / trim |
+
+Gemini **extracts numbers** from PDFs/text. The weighted sum is **deterministic**. Show the five lines (`raw → x → w·x`) in every rec.
+
+A **hit** for later evaluation: did the named KPI subsequently confirm the call? Not “did the stock beat Nifty.”
+
+---
+
+## 4. Workflow
+
+### 0. Setup (once per name)
+
+User supplies: why they own it, 1–3 KPIs, qty + avg cost, confidence, optional sector, BSE scrip code.  
+LLM drafts thesis + KPI list. **User confirms before write.** No thesis → no tracking.
+
+### 1. Always on
+
+| Clock | What |
+|---|---|
+| Ordinary days | A few fixed IST slots (e.g. 09:30, 12:30, 16:00, 19:00). **Not** every 20 min. |
+| Name has results due in the next few days | ~20 min for **that scrip only** |
+| Results morning for that name | Every few minutes until results/PPT filing is in |
+| Overnight / weekend | Off, or one pass ~08:00 IST |
+
+BSE corporate announcements for **your scrip codes only** (same JSON the BSE site uses). Dedupe on `(exchange, announcement id or pdf url)`. Kill-list before any LLM call. Be polite: cache, back off, never faster than 15 min even on results morning. Unofficial feed — wrap in `Source.fetch(ticker, since)` so a break is a one-file fix.
+
+Quote snapshot (delayed, not a live ticker) → return vs cost on the row.
+
+### 2. Events
+
+| Event | Extract | User gets |
+|---|---|---|
+| Board-meeting intimation | Results date. S unchanged | “Results due [date].” Pack queued |
+| Few days out / evening before | Pack: 2-sentence thesis, KPI to watch, last 3–4 prints, current S, confidence. **No predicted beat** | If confident → pre-position in Groww. Else wait; KPI is already named |
+| Results / PPT / con-call | KPIs into series. Guidance {−1,0,+1} if it names the metric. Then S | Quoted KPI vs last print. Band + five-line math. Disagreement if stamp vs S > 25 |
+| Order / book / rating / pledge | Only if it maps to a named KPI. Then S | Same rec format |
+| Gated industry (peers) or key own-price move | News/peer x=0 unless mapped. Price = own 20d | Ping **only if S band changes** |
+
+**Kill (store, never score, never ping):** trading window closure, ESOP allotment, newspaper publication of results, record date, book closure, RTA/registrar certs, investor complaint statements, loss/duplicate shares, compliance certs (Reg 74(5) etc.), AGM procedural notices.
+
+**Low (store, no push):** analyst meet intimations, dividend intimations, AGM agenda, routine subsidiary incorporation, RTA/secretarial role changes.
+
+**Candidate:** board meeting (results date), financial results, investor presentations, con-call transcripts, order awards, credit ratings, pledge/SAST, KMP/auditor/director changes, fund raise, acquisitions, regulatory actions, guidance/clarification, Company Update whose subcategory is not killed. Unknown category → candidate.
+
+PDFs: download, `pdfplumber`. Near-empty text → `needs_manual_read`, still notify with the link, **block Buy**.
+
+### 3. User talk-back
+
+- “Less sure, 55, still holding” → stamp=55, note appended, S not overwritten by the stamp.
+- Accept/nudge a rec → log `{S, each x_i, action}`. For post-beta weight review. Do not retune in beta.
+
+### 4. v1 surface
+
+- **CLI table:** name, return vs cost, thesis, KPI series, last S, band, next earnings date.
+- **macOS notification** on: earnings pack, band change, needs_manual_read.
+- **Telegram: later**, not v1.
+
+---
+
+## 5. Data
+
+- **BSE primary.** Unofficial `AnnGetData` JSON; browser-like User-Agent + Referer; filter by scrip code + date.
+- **NSE:** only if a holding is NSE-only.
+- **Prices:** delayed public quotes (Yahoo or similar) or Groww LTP later. v1: delayed quotes + hand-entered qty/cost.
+- **LLM:** Gemini Flash (Google AI Studio). Structured JSON. Temperature 0. One call per candidate. Prompt must never output buy/sell as *unexplained* advice — always S + factor lines. Groq+Llama optional fallback.
+- **Industry v1:** peer KPI prints from ledger names sharing `sector`. No RSS until Phase 1b.
+
+---
+
+## 6. Storage (SQLite)
+
+- `tickers` / YAML ledger: symbol, bse_code, nse_symbol, status (held|watchlist), thesis, conditions/KPIs, qty, avg_cost, confidence, sector, review_by
+- `filings`: id, ticker, exchange, ann_id, category, subcategory, headline, pdf_url, filed_at, hash, filter_status, created_at
+- `scores`: filing_id or event_id, x_kpi, x_book, x_industry, x_price, x_guidance, S, band, triage_json, created_at
+- `kpi_series`: ticker, kpi_name, period, value, source_filing_id
+- `alerts`: event_id, channel (macos|telegram), sent_at
+- `decisions`: ticker, date, action, note, S_at_time (user stamp / follow-or-nudge)
+
+`data/` gitignored (db + PDFs).
+
+---
+
+## 7. Build phases
+
+**Phase 0 (only committed v1 scope)**
+
+1. `config/tickers.yaml` — user fills real holdings. Enforce thesis + ≥1 KPI at load. Example file is a shape, not fake holdings.
+2. BSE source + dedupe + SQLite.
+3. Kill-list filter.
+4. CLI table + delayed quotes (return vs cost).
+5. macOS notify for **candidate** filings (headline + link) before LLM is on — so the pipe is testable.
+6. Scheduler with the **slot / results-week / results-morning** cadence above.
+
+Ship when: a board-meeting or results filing for a held ticker produces a macOS notification within the cadence window, and a trading-window closure does not.
+
+**Phase 1**
+
+- PDF extract + Gemini JSON extract of named KPIs + frozen S + rec text with arithmetic.
+- Earnings pack (intimation → date → few-days-out notify).
+- `decisions` log CLI (`pa decide SUZLON trim "deliveries miss"`).
+- Faster poll on results morning.
+
+**Phase 1b (later)**
+
+- Telegram push (same events as macOS).
+- Groww read-only holdings/LTP.
+- Gated industry RSS.
+- NSE for NSE-only names.
+
+**Phase 2 (only after a results season)**
+
+- Optional read-only local page.
+- Weight review from `decisions` log. Still no ML.
+
+---
+
+## 8. Stack
+
+Python 3.12, `uv`, `requests`, `pdfplumber`, `PyYAML`, SQLite stdlib, Gemini official client. Scheduler: `launchd` plist or APScheduler. Each module runnable standalone, e.g. `uv run python -m src.sources.bse SUZLON`.
+
+```
+positional-awareness/
+  SPEC.md
+  BUILD_PROMPT.md
+  config/tickers.yaml          # user-owned; example at tickers.example.yaml
+  src/sources/{base.py,bse.py}
+  src/{filter.py,score.py,extract.py,notify.py,store.py,cli.py,main.py}
+  data/                        # gitignored
+  tests/                       # fixture JSON from a real BSE response
+```
+
+Save one real BSE response as a fixture **before** writing the filter. Filter against fixtures, not live calls.
+
+---
+
+## 9. Prompt guardrails (verbatim in Gemini system prompt)
+
+- You never place a trade. You never use buy/sell/hold as unexplained advice. Always cite the named KPI or factor.
+- If the filing does not touch any listed KPI/condition, x_kpi is 0 and relevance to S from that filing is at most guidance/book if those apply; do not invent a thesis.
+- Numbers over adjectives. Quote figures from the filing.
+- Output JSON only for extract/score calls.
+
+---
+
+## 10. Kill criterion (after one results season)
+
+Keep the code if at least one real decision changed or one would-have-missed event was caught. Else keep `tickers.yaml` as a checklist and delete the loop. The ledger is the valuable part.

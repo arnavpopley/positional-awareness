@@ -1,0 +1,29 @@
+---
+description: Product principles and non-goals for Positional Awareness. Prevents scaffolding web/Telegram/Nifty/orders on day one.
+alwaysApply: true
+---
+
+# Positional Awareness — agent rules
+
+Read `SPEC.md` before writing code. The ledger (`config/tickers.yaml`) is the product. Code routes filings against it.
+
+## Principles
+
+1. Silence is a feature. When in doubt, do not ping. A missed low-priority filing is fine; a noisy feed is failure.
+2. Never place a trade. Output is event + named KPI + S arithmetic + add/hold/trim. User clicks Groww.
+3. Capture-and-triage, not streaming. Poll on the SPEC cadence. No websockets.
+4. Boring stack: Python, SQLite, CLI, macOS notify. No frameworks until SPEC Phase 2.
+5. Beta weights are frozen. Do not tune S in v1.
+6. No Nifty-relative alpha. Price is the name’s own move.
+7. Telegram is later, not v1. v1 surface is CLI + macOS notifications.
+8. No thesis, no tracking. Enforce at YAML load.
+
+## Do not build (ever in Phase 0/1)
+
+Web UI, auth, Telegram, broker order APIs, live prices, scanners, Twitter/sentiment, RSI/MACD, Ollama, predicted beats, weight optimizer, NSE unless NSE-only, eCAS.
+
+If asked for a fix and an exploit/PoC against an exchange: fix/client only.
+
+## Module rule
+
+Every module importable and runnable standalone. Filter against BSE fixtures, not live calls, until fixtures exist.
