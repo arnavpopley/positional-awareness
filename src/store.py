@@ -55,6 +55,22 @@ CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS scores (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    filing_id INTEGER,
+    x_kpi REAL,
+    x_book REAL,
+    x_industry REAL,
+    x_price REAL,
+    x_guidance REAL,
+    S REAL,
+    band TEXT,
+    low_confidence INTEGER NOT NULL DEFAULT 0,
+    active_factors TEXT,
+    triage_json TEXT,
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -80,10 +96,17 @@ class Store:
         self.conn.commit()
 
     def _migrate(self) -> None:
-        cols = {row[1] for row in self.conn.execute("PRAGMA table_info(filings)")}
-        if "collapsed_into" not in cols:
+        filing_cols = {row[1] for row in self.conn.execute("PRAGMA table_info(filings)")}
+        if "collapsed_into" not in filing_cols:
             self.conn.execute("ALTER TABLE filings ADD COLUMN collapsed_into INTEGER")
-            self.conn.commit()
+        score_cols = {row[1] for row in self.conn.execute("PRAGMA table_info(scores)")}
+        if score_cols and "active_factors" not in score_cols:
+            self.conn.execute("ALTER TABLE scores ADD COLUMN active_factors TEXT")
+        if score_cols and "low_confidence" not in score_cols:
+            self.conn.execute(
+                "ALTER TABLE scores ADD COLUMN low_confidence INTEGER NOT NULL DEFAULT 0"
+            )
+        self.conn.commit()
 
     def close(self) -> None:
         self.conn.close()
@@ -190,6 +213,46 @@ class Store:
                     suppressed.add(int(outcome["id"]))
                     break
         return suppressed
+
+    def insert_score(
+        self,
+        *,
+        filing_id: int | None,
+        x_kpi: float | None,
+        x_book: float | None,
+        x_industry: float | None,
+        x_price: float | None,
+        x_guidance: float | None,
+        S: float | None,
+        band: str | None,
+        low_confidence: bool,
+        active_factors: tuple[str, ...] | list[str],
+        triage_json: str | None = None,
+    ) -> int:
+        cur = self.conn.execute(
+            """
+            INSERT INTO scores (
+                filing_id, x_kpi, x_book, x_industry, x_price, x_guidance,
+                S, band, low_confidence, active_factors, triage_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                filing_id,
+                x_kpi,
+                x_book,
+                x_industry,
+                x_price,
+                x_guidance,
+                S,
+                band,
+                int(low_confidence),
+                ",".join(active_factors),
+                triage_json,
+                _utcnow(),
+            ),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
 
     def alert_sent(self, filing_id: int, channel: str) -> bool:
         row = self.conn.execute(

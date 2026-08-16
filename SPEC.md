@@ -1,6 +1,6 @@
 # Positional Awareness
 
-Personal, single-user tool. Stay involved with holdings over time without re-learning the business. Each name keeps its thesis and KPI history on the row. When facts change, you get a **direct add / hold / trim** with the arithmetic shown. **You click Groww.** This agent never places orders.
+Personal, single-user tool. Stay involved with holdings over time without re-learning the business. Each name keeps its thesis and KPI history on the row. When facts change, you get the **named KPI evidence and the scorecard arithmetic**. **You click Groww.** This agent never places orders.
 
 This is not a scanner, not a broker, not a Nifty-alpha engine, not a news-sentiment firehose.
 
@@ -12,12 +12,12 @@ You buy for a reason, then the name stays in the book and the reason evaporates.
 
 - Keeps **thesis + 1–3 named KPIs** (revenue, PAT, deliveries, order book, …) on each row, with a quarter-by-quarter series.
 - Wakes you when earnings are a few days out, and when a print/order/news/price move would change what to do.
-- Recommends **add / hold / trim** from a frozen, visible scorecard.
+- Shows a **frozen, visible scorecard** (S and the five factor lines). Bands are descriptive labels, not instructions.
 - Lets you pre-position before results **if you are already confident**, or wait with one KPI in mind and act after confirmation.
 
-Involvement ≠ more trades. Default is Hold. A quiet week is success.
+Involvement ≠ more trades. A quiet week is success.
 
-Expected cadence for ~10 names: glance at prints (~40/year, most Hold); **hard add/trim a handful of times a year**; optional earnings plays on 0–1 names per results week. Do not nag daily.
+Expected cadence for ~10 names: glance at prints (~40/year, most no change); **a handful of real position changes a year**; optional earnings plays on 0–1 names per results week. Do not nag daily.
 
 ---
 
@@ -40,38 +40,46 @@ Expected cadence for ~10 names: glance at prints (~40/year, most Hold); **hard a
 
 ## 3. Beta scorecard (frozen — do not tune)
 
+Weights are frozen:
+
 ```
-S = 0.40·x_kpi + 0.20·x_book + 0.15·x_industry + 0.15·x_price + 0.10·x_guidance
+w_kpi=0.40  w_book=0.20  w_industry=0.15  w_price=0.15  w_guidance=0.10
 ```
 
-Each `x` ∈ [−1, +1].
+Each factor returns `(x ∈ [−1, +1], active: bool)`. **Inactive is not zero.** Zero means the factor fired and the evidence was flat. Missing data (no KPI print, no peer print, no guidance) sets `active=false` and drops that weight from the denominator.
+
+```
+S = Σ (w_i · x_i for active i) / Σ (w_i for active i)
+```
+
+If no factors are active, S is **undefined** (`None`). Emit no band. If fewer than two factors are active, mark **`low_confidence`** and **suppress the band**; still show the five factor lines. Inactive lines render as `n/a`, never `0.00`.
 
 | Factor | w | Raw | Normalization |
 |---|---|---|---|
-| Thesis KPI print | 0.40 | QoQ % of the named KPI(s) from results/PPT | Winsorize at ±25%, then `/ 0.25` |
-| Order book / ops filings | 0.20 | Book YoY % or order vs quarterly sales | Same winsorize; one-off order: `sign * min(1, order/q_sales)` |
-| Industry | 0.15 | **v1: peer prints** from other ledger names with the same sector tag. RSS news later. | Mean of peer KPI z vs their own history. Unrelated = 0 |
-| Own price | 0.15 | 20-day return of **this name**. Alert if \|1d\| > 3% or \|5d\| > 8% | Winsorize at ±15%, then `/ 0.15`. **Not vs Nifty** |
-| Guidance | 0.10 | PPT/con-call vs last guidance, **only if it names your KPI** | LLM maps to {−1, 0, +1}. Else 0 |
+| Thesis KPI print | 0.40 | QoQ % of the named KPI(s) from results/PPT | Winsorize at ±25%, then `/ 0.25`. No print → inactive |
+| Order book / ops filings | 0.20 | Book YoY % or order vs quarterly sales | Same winsorize; one-off order: `sign * min(1, order/q_sales)`. No filing → inactive |
+| Industry | 0.15 | **v1: peer prints** from other ledger names with the same sector tag. RSS news later. | Mean of peer KPI z vs their own history. No peers / unrelated → inactive |
+| Own price | 0.15 | 20-day return of **this name**. Alert if \|1d\| > 3% or \|5d\| > 8% | Winsorize at ±15%, then `/ 0.15`. **Not vs Nifty**. No quote → inactive |
+| Guidance | 0.10 | PPT/con-call vs last guidance, **only if it names your KPI** | Maps to {−1, 0, +1} when present. Else inactive |
 
 **Not inside S**
 
 - **Your confidence (0–100):** disagreement flag. If mapped S vs stamp differs by > 25 points, say so. Do not mix a stale 80% into S (it blocks a broken KPI).
-- **Position weight:** action *modifier*. Lean-add on a name already ≥ **20%** of the book → do not add. Lean-trim on a large weight → stronger trim.
+- **Position weight:** size context only. A name already ≥ **20%** of the book is noted; it does not change S.
 - **Days to results:** switches the message (pack vs post-print). Does not change S.
-- **`needs_manual_read`:** blocks Buy until the user confirms the number.
+- **`needs_manual_read`:** the number is unconfirmed until the user reads the filing.
 
-**S → recommendation**
+**S → descriptive band** (not an instruction)
 
-| S | Verb |
+| S | Label |
 |---|---|
-| ≥ +0.60 | Buy / add |
-| +0.25 to +0.60 | Hold, lean add (pre-position only if results are inside a few days) |
-| −0.25 to +0.25 | Hold |
-| −0.60 to −0.25 | Hold, lean trim |
-| ≤ −0.60 | Sell / trim |
+| ≥ +0.60 | strongly positive |
+| +0.25 to +0.60 | positive |
+| −0.25 to +0.25 | neutral |
+| −0.60 to −0.25 | negative |
+| ≤ −0.60 | strongly negative |
 
-Gemini **extracts numbers** from PDFs/text. The weighted sum is **deterministic**. Show the five lines (`raw → x → w·x`) in every rec.
+Gemini **extracts numbers** from PDFs/text. The weighted sum is **deterministic**. Show the five lines (`raw → x → w·x`) in every rec. Persist `active_factors` next to S.
 
 A **hit** for later evaluation: did the named KPI subsequently confirm the call? Not “did the stock beat Nifty.”
 
@@ -148,7 +156,7 @@ PDFs: download, `pdfplumber`. Near-empty text → `needs_manual_read`, still not
 
 - `tickers` / YAML ledger: symbol, bse_code, nse_symbol, status (held|watchlist), thesis, conditions/KPIs, qty, avg_cost, confidence, sector, review_by
 - `filings`: id, ticker, exchange, ann_id, category, subcategory, headline, pdf_url, filed_at, hash, filter_status, created_at
-- `scores`: filing_id or event_id, x_kpi, x_book, x_industry, x_price, x_guidance, S, band, triage_json, created_at
+- `scores`: filing_id or event_id, x_kpi, x_book, x_industry, x_price, x_guidance, S, band, low_confidence, active_factors, triage_json, created_at. Inactive x is NULL, not 0.
 - `kpi_series`: ticker, kpi_name, period, value, source_filing_id
 - `alerts`: event_id, channel (macos|telegram), sent_at
 - `decisions`: ticker, date, action, note, S_at_time (user stamp / follow-or-nudge)
@@ -212,8 +220,8 @@ Save one real BSE response as a fixture **before** writing the filter. Filter ag
 
 ## 9. Prompt guardrails (verbatim in Gemini system prompt)
 
-- You never place a trade. You never use buy/sell/hold as unexplained advice. Always cite the named KPI or factor.
-- If the filing does not touch any listed KPI/condition, x_kpi is 0 and relevance to S from that filing is at most guidance/book if those apply; do not invent a thesis.
+- You never place a trade. You never output an action verb (including buy, sell, add, trim, hold). Report factor evidence and figures only.
+- If the filing does not touch any listed KPI/condition, that factor is **inactive** (n/a), not x = 0. Do not invent a thesis.
 - Numbers over adjectives. Quote figures from the filing.
 - Output JSON only for extract/score calls.
 
