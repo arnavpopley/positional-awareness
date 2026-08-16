@@ -149,7 +149,7 @@ PDFs: download, `pdfplumber`. Near-empty text → `needs_manual_read`, still not
 - **NSE:** only if a holding is NSE-only.
 - **Prices:** delayed public quotes (Yahoo or similar) or Groww LTP later. v1: delayed quotes + ledger qty/cost.
 - **Groww holdings:** `GET https://api.groww.in/v1/holdings/user` from `pos sync` only. Thin `requests` client; no growwapi SDK. Token from `.env`. Cache in SQLite; CLI reads the cache.
-- **LLM:** Gemini Flash (Google AI Studio). Structured JSON. Temperature 0. One call per candidate. Prompt must never output buy/sell as *unexplained* advice — always S + factor lines. Groq+Llama optional fallback.
+- **LLM:** Gemini Flash (Google AI Studio). Structured JSON. Temperature 0. One call per candidate or priority filing, never per poll. Cached by filing hash. Prompt is SPEC §9 verbatim. Groq+Llama optional fallback.
 - **Industry v1:** peer KPI prints from ledger names sharing `sector`. No RSS until Phase 1b.
 
 ---
@@ -160,6 +160,7 @@ PDFs: download, `pdfplumber`. Near-empty text → `needs_manual_read`, still not
 - `filings`: id, ticker, exchange, ann_id, category, subcategory, headline, pdf_url, filed_at, hash, filter_status, created_at
 - `scores`: filing_id or event_id, x_kpi, x_book, x_industry, x_price, x_guidance, S, band, low_confidence, active_factors, triage_json, created_at. Inactive x is NULL, not 0.
 - `kpi_series`: ticker, kpi_name, period, value, source_filing_id
+- `extractions`: filing_hash, filing_id, text, needs_manual_read, kpis_json, model, created_at. Cached by filing hash so Gemini is never re-called on a re-run.
 - `alerts`: event_id, channel (macos|telegram), sent_at
 - `holdings_cache`: symbol, isin, qty, avg_cost, fetched_at (Groww snapshot; CLI reads this, never the API)
 - `decisions`: ticker, date, action, note, S_at_time (user stamp / follow-or-nudge)

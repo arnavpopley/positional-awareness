@@ -34,7 +34,8 @@ uv sync --group dev
 | `uv run python -m src.sources.bse SUZLON` | Fetch announcements for one name |
 | `uv run python -m src.filter` | Classify the fixture |
 | `uv run python -m src.notify` | Test a macOS notification |
-| `uv run pytest` | Filter + dedupe + cadence tests |
+| `uv run python -m src.extract path/to.pdf` | pdfplumber text extract (no Gemini). Caps at ~15k chars. |
+| `uv run pytest` | Filter + dedupe + cadence + extract tests |
 
 Keep the scheduler alive with `config/launchd.plist.example` (replace `REPO`). Never faster than 15 minutes.
 

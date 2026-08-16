@@ -38,6 +38,9 @@ def _empty_stats() -> dict[str, int]:
         "dup": 0,
         "notified": 0,
         "collapsed": 0,
+        "extracted": 0,
+        "extract_cached": 0,
+        "needs_manual_read": 0,
     }
 
 
@@ -48,16 +51,23 @@ def ingest(
     notify: bool,
     notifier=notify_candidate,
     now: datetime | None = None,
+    tickers: list[Ticker] | None = None,
+    extractor=None,
 ) -> dict[str, int]:
     """Store every filing. Notify only fresh candidate/priority rows.
 
     Recency (48h) is independent of DB emptiness and of --notify-backfill.
     Priority always notifies when fresh (no digest/batching skip).
+    Extraction runs only for fresh, non-collapsed candidate/priority rows.
     """
+    from src.extract import extract_filing as default_extract
+
     now = now or datetime.now(tz=IST)
     stats = _empty_stats()
     inserted: list[tuple[Filing, str, int]] = []
-    tickers: set[str] = set()
+    tickers_seen: set[str] = set()
+    book = {t.symbol: t for t in (tickers or [])}
+    do_extract = default_extract if extractor is None else extractor
     for filing in filings:
         status = classify(filing)
         row_id = store.insert_filing(filing, status)
@@ -65,7 +75,7 @@ def ingest(
             stats["dup"] += 1
             continue
         stats[status] += 1
-        tickers.add(filing.ticker)
+        tickers_seen.add(filing.ticker)
         if is_board_meeting_intimation(filing):
             due = parse_results_due(filing)
             if due:
@@ -77,7 +87,7 @@ def ingest(
         inserted.append((filing, status, row_id))
 
     suppressed: set[int] = set()
-    for symbol in tickers:
+    for symbol in tickers_seen:
         suppressed |= store.collapse_outcome_into_results(symbol)
     stats["collapsed"] = len(suppressed)
 
@@ -88,7 +98,13 @@ def ingest(
             continue
         if not is_notify_fresh(filing, now):
             continue
-        # --notify-backfill / empty-DB may set notify=True; recency still applies.
+        result = do_extract(filing, book.get(filing.ticker), store)
+        if result is not None:
+            stats["extracted"] += 1
+            if getattr(result, "cached", False):
+                stats["extract_cached"] += 1
+            if getattr(result, "needs_manual_read", False):
+                stats["needs_manual_read"] += 1
         if not notify:
             continue
         if store.alert_sent(row_id, CHANNEL):
@@ -128,7 +144,7 @@ def poll_tickers(
         except requests.RequestException as exc:
             print(f"poll: {ticker.symbol} fetch failed: {exc}", file=sys.stderr)
             continue
-        stats = ingest(filings, store, notify=notify, now=ist)
+        stats = ingest(filings, store, notify=notify, now=ist, tickers=tickers)
         store.touch_fetch(ticker.symbol, ist)
         for key in totals:
             totals[key] += stats[key]
@@ -136,7 +152,8 @@ def poll_tickers(
             f"{ticker.symbol}: +{stats['candidate']} candidate "
             f"+{stats['priority']} priority +{stats['low']} low "
             f"+{stats['kill']} kill dup={stats['dup']} "
-            f"notified={stats['notified']} collapsed={stats['collapsed']}"
+            f"notified={stats['notified']} collapsed={stats['collapsed']} "
+            f"extracted={stats['extracted']}"
         )
     return totals
 
@@ -153,7 +170,7 @@ def poll_fixture(
     ist = datetime.now(tz=IST)
     for ticker in tickers:
         filings = load_fixture(path, ticker.symbol)
-        stats = ingest(filings, store, notify=notify, notifier=notifier, now=ist)
+        stats = ingest(filings, store, notify=notify, notifier=notifier, now=ist, tickers=tickers)
         store.touch_fetch(ticker.symbol, ist)
         for key in totals:
             totals[key] += stats[key]
@@ -177,7 +194,8 @@ def run_slot(kind: str, *, notify_backfill: bool = False, fixture: Path | None =
             f"slot={kind} names={len(due)} "
             f"candidate={stats['candidate']} priority={stats['priority']} "
             f"kill={stats['kill']} low={stats['low']} "
-            f"notified={stats['notified']} collapsed={stats['collapsed']}"
+            f"notified={stats['notified']} collapsed={stats['collapsed']} "
+            f"extracted={stats['extracted']}"
         )
     finally:
         store.close()

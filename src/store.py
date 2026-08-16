@@ -80,6 +80,17 @@ CREATE TABLE IF NOT EXISTS holdings_cache (
     avg_cost REAL NOT NULL,
     fetched_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS extractions (
+    filing_hash TEXT PRIMARY KEY,
+    filing_id INTEGER,
+    text TEXT,
+    text_chars INTEGER NOT NULL DEFAULT 0,
+    needs_manual_read INTEGER NOT NULL DEFAULT 0,
+    kpis_json TEXT,
+    model TEXT,
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -291,6 +302,45 @@ class Store:
             )
             for row in rows
         ]
+
+    def get_extraction(self, filing_hash: str) -> sqlite3.Row | None:
+        return self.conn.execute(
+            "SELECT * FROM extractions WHERE filing_hash = ?",
+            (filing_hash,),
+        ).fetchone()
+
+    def save_extraction(
+        self,
+        *,
+        filing_hash: str,
+        filing_id: int | None,
+        text: str,
+        needs_manual_read: bool,
+        kpis_json: dict | None,
+        model: str | None,
+    ) -> None:
+        import json
+
+        self.conn.execute(
+            """
+            INSERT INTO extractions (
+                filing_hash, filing_id, text, text_chars, needs_manual_read,
+                kpis_json, model, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(filing_hash) DO NOTHING
+            """,
+            (
+                filing_hash,
+                filing_id,
+                text,
+                len(text),
+                int(needs_manual_read),
+                json.dumps(kpis_json, ensure_ascii=False) if kpis_json is not None else None,
+                model,
+                _utcnow(),
+            ),
+        )
+        self.conn.commit()
 
     def alert_sent(self, filing_id: int, channel: str) -> bool:
         row = self.conn.execute(
