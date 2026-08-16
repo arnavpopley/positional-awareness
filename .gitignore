@@ -1,4 +1,5 @@
 data/
+config/tickers.yaml
 .venv/
 __pycache__/
 *.pyc
