@@ -23,7 +23,7 @@ Expected cadence for ~10 names: glance at prints (~40/year, most no change); **a
 
 ## 2. Non-goals (do not build)
 
-- Broker order placement (Groww/Kite). Read-only holdings later; v1 is hand-entered qty/cost.
+- Broker order placement (Groww/Kite). Read-only holdings via `pos sync` (cached). Ledger stays hand-edited. Never orders.
 - Live streaming prices, websockets, RSI/MACD stacks.
 - **Nifty-relative / excess-return alpha.** This book is allowed to diverge from the index. Price factor is the **name’s own move**.
 - Multi-user, auth, deploy-for-others.
@@ -136,7 +136,8 @@ PDFs: download, `pdfplumber`. Near-empty text → `needs_manual_read`, still not
 
 ### 4. v1 surface
 
-- **CLI table:** name, return vs cost, thesis, KPI series, last S, band, next earnings date.
+- **CLI table:** name, return vs cost, thesis, KPI series, last S, band, next earnings date. Thesis-less holdings count from the Groww cache (never the live API).
+- **`pos sync`:** read-only Groww holdings vs ledger. Report drift; do not write the ledger.
 - **macOS notification** on: earnings pack, band change, needs_manual_read.
 - **Telegram: later**, not v1.
 
@@ -146,7 +147,8 @@ PDFs: download, `pdfplumber`. Near-empty text → `needs_manual_read`, still not
 
 - **BSE primary.** Unofficial `AnnGetData` JSON; browser-like User-Agent + Referer; filter by scrip code + date.
 - **NSE:** only if a holding is NSE-only.
-- **Prices:** delayed public quotes (Yahoo or similar) or Groww LTP later. v1: delayed quotes + hand-entered qty/cost.
+- **Prices:** delayed public quotes (Yahoo or similar) or Groww LTP later. v1: delayed quotes + ledger qty/cost.
+- **Groww holdings:** `GET https://api.groww.in/v1/holdings/user` from `pos sync` only. Thin `requests` client; no growwapi SDK. Token from `.env`. Cache in SQLite; CLI reads the cache.
 - **LLM:** Gemini Flash (Google AI Studio). Structured JSON. Temperature 0. One call per candidate. Prompt must never output buy/sell as *unexplained* advice — always S + factor lines. Groq+Llama optional fallback.
 - **Industry v1:** peer KPI prints from ledger names sharing `sector`. No RSS until Phase 1b.
 
@@ -159,6 +161,7 @@ PDFs: download, `pdfplumber`. Near-empty text → `needs_manual_read`, still not
 - `scores`: filing_id or event_id, x_kpi, x_book, x_industry, x_price, x_guidance, S, band, low_confidence, active_factors, triage_json, created_at. Inactive x is NULL, not 0.
 - `kpi_series`: ticker, kpi_name, period, value, source_filing_id
 - `alerts`: event_id, channel (macos|telegram), sent_at
+- `holdings_cache`: symbol, isin, qty, avg_cost, fetched_at (Groww snapshot; CLI reads this, never the API)
 - `decisions`: ticker, date, action, note, S_at_time (user stamp / follow-or-nudge)
 
 `data/` gitignored (db + PDFs).
@@ -188,7 +191,7 @@ Ship when: a board-meeting or results filing for a held ticker produces a macOS 
 **Phase 1b (later)**
 
 - Telegram push (same events as macOS).
-- Groww read-only holdings/LTP.
+- Groww LTP. Holdings sync is `pos sync` (already in tree).
 - Gated industry RSS.
 - NSE for NSE-only names.
 
@@ -210,6 +213,7 @@ positional-awareness/
   config/tickers.yaml          # user-owned; example at tickers.example.yaml
   src/sources/{base.py,bse.py}
   src/{filter.py,score.py,extract.py,notify.py,store.py,cli.py,main.py}
+  src/portfolio/{base.py,yaml_portfolio.py,groww.py,reconcile.py}
   data/                        # gitignored
   tests/                       # fixture JSON from a real BSE response
 ```

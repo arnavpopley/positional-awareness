@@ -8,6 +8,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from src.paths import DATA_DIR, DB_PATH
+from src.portfolio.base import Holding
 from src.sources.base import Filing
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -70,6 +71,14 @@ CREATE TABLE IF NOT EXISTS scores (
     active_factors TEXT,
     triage_json TEXT,
     created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS holdings_cache (
+    symbol TEXT PRIMARY KEY,
+    isin TEXT NOT NULL DEFAULT '',
+    qty REAL NOT NULL,
+    avg_cost REAL NOT NULL,
+    fetched_at TEXT NOT NULL
 );
 """
 
@@ -253,6 +262,35 @@ class Store:
         )
         self.conn.commit()
         return int(cur.lastrowid)
+
+    def replace_holdings_cache(self, holdings: list[Holding]) -> None:
+        now = _utcnow()
+        self.conn.execute("DELETE FROM holdings_cache")
+        self.conn.executemany(
+            """
+            INSERT INTO holdings_cache (symbol, isin, qty, avg_cost, fetched_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                (h.symbol, h.isin, h.qty, h.avg_cost, now)
+                for h in holdings
+            ],
+        )
+        self.conn.commit()
+
+    def holdings_cache(self) -> list[Holding]:
+        rows = self.conn.execute(
+            "SELECT symbol, isin, qty, avg_cost FROM holdings_cache ORDER BY symbol"
+        ).fetchall()
+        return [
+            Holding(
+                symbol=row["symbol"],
+                isin=row["isin"],
+                qty=float(row["qty"]),
+                avg_cost=float(row["avg_cost"]),
+            )
+            for row in rows
+        ]
 
     def alert_sent(self, filing_id: int, channel: str) -> bool:
         row = self.conn.execute(

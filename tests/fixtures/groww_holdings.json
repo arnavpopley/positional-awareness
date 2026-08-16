@@ -1,0 +1,21 @@
+{
+  "status": "SUCCESS",
+  "payload": {
+    "holdings": [
+      {
+        "isin": "INE040H01021",
+        "trading_symbol": "SUZLON",
+        "quantity": 100,
+        "average_price": 45.5,
+        "pledge_quantity": 0,
+        "demat_locked_quantity": 0,
+        "groww_locked_quantity": 0,
+        "repledge_quantity": 0,
+        "t1_quantity": 0,
+        "demat_free_quantity": 100,
+        "corporate_action_additional_quantity": 0,
+        "active_demat_transfer_quantity": 0
+      }
+    ]
+  }
+}

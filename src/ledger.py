@@ -37,6 +37,7 @@ class Ticker:
     thesis: str
     kpis: tuple[Kpi, ...]
     results_due: date | None = None
+    isin: str = ""
 
     def thesis_short(self, width: int = 48) -> str:
         line = " ".join(self.thesis.split())
@@ -113,6 +114,7 @@ def parse_ticker(row: dict) -> Ticker:
         thesis=thesis,
         kpis=tuple(kpis),
         results_due=_as_date(row.get("results_due"), "results_due", symbol),
+        isin=str(row.get("isin") or "").strip().upper(),
     )
 
 

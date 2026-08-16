@@ -25,8 +25,9 @@ uv sync --group dev
 
 | Command | What |
 |---|---|
-| `uv run python -m src.cli` | Holdings table (delayed last price, return vs cost, thesis, next event) |
-| `uv run python -m src.cli --no-quotes` | Same table, skip the quote fetch |
+| `uv run pos` | Holdings table (delayed last price, return vs cost, thesis, next event). Prints thesis-less holdings count from cache. |
+| `uv run pos --no-quotes` | Same table, skip the quote fetch |
+| `uv run pos sync` | Read-only Groww holdings vs ledger. Reports missing thesis / not-held / qty-cost drift. Never writes the ledger. |
 | `uv run python -m src.main --once` | One poll of BSE for ledger names. First run stores silently; later runs notify **candidate** filings |
 | `uv run python -m src.main --once --fixture tests/fixtures/anngetdata.json --notify-backfill` | Replay the saved BSE JSON (board meeting / results notify; trading-window does not) |
 | `uv run python -m src.main` | Scheduler: 09:30 / 12:30 / 16:00 / 19:00 IST weekdays, 08:00 IST daily, 15-minute floor for results-week / results-morning |

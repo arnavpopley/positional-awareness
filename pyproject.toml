@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "apscheduler>=3.10,<4",
+    "python-dotenv>=1.0",
     "pyyaml>=6.0",
     "requests>=2.32",
 ]
@@ -21,6 +22,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
+
+[project.scripts]
+pos = "src.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
