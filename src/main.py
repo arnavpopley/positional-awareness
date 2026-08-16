@@ -10,7 +10,13 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from src.filter import classify, is_board_meeting_intimation, is_results_or_ppt, parse_results_due
+from src.filter import (
+    classify,
+    is_board_meeting_intimation,
+    is_notify_fresh,
+    is_results_or_ppt,
+    parse_results_due,
+)
 from src.ledger import LedgerError, Ticker, load_tickers
 from src.notify import CHANNEL, notify_candidate
 from src.schedule import IST, MIN_INTERVAL, tickers_for_slot
@@ -20,6 +26,19 @@ from src.store import Store
 
 LOOKBACK_DAYS = 14
 GAP_BETWEEN_NAMES = 0.5
+PUSH_STATUSES = {"candidate", "priority"}
+
+
+def _empty_stats() -> dict[str, int]:
+    return {
+        "kill": 0,
+        "low": 0,
+        "candidate": 0,
+        "priority": 0,
+        "dup": 0,
+        "notified": 0,
+        "collapsed": 0,
+    }
 
 
 def ingest(
@@ -28,8 +47,17 @@ def ingest(
     *,
     notify: bool,
     notifier=notify_candidate,
+    now: datetime | None = None,
 ) -> dict[str, int]:
-    stats = {"kill": 0, "low": 0, "candidate": 0, "dup": 0, "notified": 0}
+    """Store every filing. Notify only fresh candidate/priority rows.
+
+    Recency (48h) is independent of DB emptiness and of --notify-backfill.
+    Priority always notifies when fresh (no digest/batching skip).
+    """
+    now = now or datetime.now(tz=IST)
+    stats = _empty_stats()
+    inserted: list[tuple[Filing, str, int]] = []
+    tickers: set[str] = set()
     for filing in filings:
         status = classify(filing)
         row_id = store.insert_filing(filing, status)
@@ -37,6 +65,7 @@ def ingest(
             stats["dup"] += 1
             continue
         stats[status] += 1
+        tickers.add(filing.ticker)
         if is_board_meeting_intimation(filing):
             due = parse_results_due(filing)
             if due:
@@ -45,10 +74,28 @@ def ingest(
             store.mark_results_filed(
                 filing.ticker, parse_results_due(filing) or store.results_due(filing.ticker)
             )
-        if notify and status == "candidate" and not store.alert_sent(row_id, CHANNEL):
-            if notifier(filing):
-                store.record_alert(row_id, CHANNEL)
-                stats["notified"] += 1
+        inserted.append((filing, status, row_id))
+
+    suppressed: set[int] = set()
+    for symbol in tickers:
+        suppressed |= store.collapse_outcome_into_results(symbol)
+    stats["collapsed"] = len(suppressed)
+
+    for filing, status, row_id in inserted:
+        if row_id in suppressed:
+            continue
+        if status not in PUSH_STATUSES:
+            continue
+        if not is_notify_fresh(filing, now):
+            continue
+        # --notify-backfill / empty-DB may set notify=True; recency still applies.
+        if not notify:
+            continue
+        if store.alert_sent(row_id, CHANNEL):
+            continue
+        if notifier(filing, status=status):
+            store.record_alert(row_id, CHANNEL)
+            stats["notified"] += 1
     return stats
 
 
@@ -72,7 +119,7 @@ def poll_tickers(
     import time as time_mod
 
     ist = now or datetime.now(tz=IST)
-    totals = {"kill": 0, "low": 0, "candidate": 0, "dup": 0, "notified": 0}
+    totals = _empty_stats()
     for i, ticker in enumerate(tickers):
         if i:
             time_mod.sleep(GAP_BETWEEN_NAMES)
@@ -81,14 +128,15 @@ def poll_tickers(
         except requests.RequestException as exc:
             print(f"poll: {ticker.symbol} fetch failed: {exc}", file=sys.stderr)
             continue
-        stats = ingest(filings, store, notify=notify)
+        stats = ingest(filings, store, notify=notify, now=ist)
         store.touch_fetch(ticker.symbol, ist)
         for key in totals:
             totals[key] += stats[key]
         print(
             f"{ticker.symbol}: +{stats['candidate']} candidate "
-            f"+{stats['low']} low +{stats['kill']} kill "
-            f"dup={stats['dup']} notified={stats['notified']}"
+            f"+{stats['priority']} priority +{stats['low']} low "
+            f"+{stats['kill']} kill dup={stats['dup']} "
+            f"notified={stats['notified']} collapsed={stats['collapsed']}"
         )
     return totals
 
@@ -101,11 +149,12 @@ def poll_fixture(
     notify: bool,
     notifier=notify_candidate,
 ) -> dict[str, int]:
-    totals = {"kill": 0, "low": 0, "candidate": 0, "dup": 0, "notified": 0}
+    totals = _empty_stats()
+    ist = datetime.now(tz=IST)
     for ticker in tickers:
         filings = load_fixture(path, ticker.symbol)
-        stats = ingest(filings, store, notify=notify, notifier=notifier)
-        store.touch_fetch(ticker.symbol, datetime.now(tz=IST))
+        stats = ingest(filings, store, notify=notify, notifier=notifier, now=ist)
+        store.touch_fetch(ticker.symbol, ist)
         for key in totals:
             totals[key] += stats[key]
     return totals
@@ -126,8 +175,9 @@ def run_slot(kind: str, *, notify_backfill: bool = False, fixture: Path | None =
             stats = poll_tickers(due, store, BSESource(), notify=notify)
         print(
             f"slot={kind} names={len(due)} "
-            f"candidate={stats['candidate']} kill={stats['kill']} "
-            f"low={stats['low']} notified={stats['notified']}"
+            f"candidate={stats['candidate']} priority={stats['priority']} "
+            f"kill={stats['kill']} low={stats['low']} "
+            f"notified={stats['notified']} collapsed={stats['collapsed']}"
         )
     finally:
         store.close()

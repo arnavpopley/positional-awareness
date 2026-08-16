@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS filings (
     filed_at TEXT,
     hash TEXT,
     filter_status TEXT NOT NULL,
+    collapsed_into INTEGER,
     created_at TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS filings_exchange_ann
@@ -75,7 +76,14 @@ class Store:
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.executescript(SCHEMA)
+        self._migrate()
         self.conn.commit()
+
+    def _migrate(self) -> None:
+        cols = {row[1] for row in self.conn.execute("PRAGMA table_info(filings)")}
+        if "collapsed_into" not in cols:
+            self.conn.execute("ALTER TABLE filings ADD COLUMN collapsed_into INTEGER")
+            self.conn.commit()
 
     def close(self) -> None:
         self.conn.close()
@@ -132,6 +140,56 @@ class Store:
         except sqlite3.IntegrityError:
             self.conn.rollback()
             return None
+
+    def mark_collapsed(self, filing_id: int, into_id: int) -> None:
+        self.conn.execute(
+            "UPDATE filings SET collapsed_into = ? WHERE id = ?",
+            (into_id, filing_id),
+        )
+        self.conn.commit()
+
+    def collapse_outcome_into_results(self, ticker: str) -> set[int]:
+        """Mark BM outcomes that duplicate a results print in a 24h window.
+
+        Returns filing ids that must not be notified.
+        """
+        suppressed: set[int] = set()
+        outcomes = self.conn.execute(
+            """
+            SELECT id, filed_at FROM filings
+            WHERE ticker = ?
+              AND category = 'Board Meeting'
+              AND subcategory = 'Outcome of Board Meeting'
+            """,
+            (ticker,),
+        ).fetchall()
+        results = self.conn.execute(
+            """
+            SELECT id, filed_at FROM filings
+            WHERE ticker = ?
+              AND category = 'Result'
+              AND subcategory = 'Financial Results'
+            """,
+            (ticker,),
+        ).fetchall()
+        window = 24 * 3600
+        for outcome in outcomes:
+            if not outcome["filed_at"]:
+                continue
+            ot = datetime.fromisoformat(outcome["filed_at"])
+            for result in results:
+                if not result["filed_at"]:
+                    continue
+                rt = datetime.fromisoformat(result["filed_at"])
+                if ot.tzinfo is None and rt.tzinfo is not None:
+                    ot = ot.replace(tzinfo=rt.tzinfo)
+                if rt.tzinfo is None and ot.tzinfo is not None:
+                    rt = rt.replace(tzinfo=ot.tzinfo)
+                if abs((ot - rt).total_seconds()) <= window:
+                    self.mark_collapsed(outcome["id"], result["id"])
+                    suppressed.add(int(outcome["id"]))
+                    break
+        return suppressed
 
     def alert_sent(self, filing_id: int, channel: str) -> bool:
         row = self.conn.execute(

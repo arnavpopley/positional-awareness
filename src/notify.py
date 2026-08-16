@@ -14,9 +14,9 @@ def _as_literal(text: str) -> str:
     return json.dumps(text, ensure_ascii=False)
 
 
-def notify_candidate(filing: Filing) -> bool:
-    """macOS notification: headline + link. Candidate filings only."""
-    title = f"{filing.ticker} · candidate"
+def notify_candidate(filing: Filing, status: str = "candidate") -> bool:
+    """macOS notification: headline + link. Candidate and priority filings."""
+    title = f"{filing.ticker} · {status}"
     body = " ".join(filing.headline.split())
     if filing.pdf_url:
         body = f"{body} · {filing.pdf_url}"

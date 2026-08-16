@@ -2,7 +2,7 @@ from src.filter import classify, is_board_meeting_intimation, is_results_or_ppt,
 from src.sources.bse import load_fixture
 from tests.helpers import filing
 
-FIXTURE = "tests/fixtures/anngetdata.json"
+FIXTURE = "tests/fixtures/suzlon_real_50.json"
 
 
 def test_spec_kill_list():
@@ -16,6 +16,7 @@ def test_spec_kill_list():
         ("Statement of Investor Complaints", "Company Update", "Investor Complaints / Information"),
         ("Loss of Share Certificate", "Company Update", "Loss of Share Certificates"),
         ("Proceedings of the AGM", "AGM/EGM", "AGM"),
+        ("Shareholder Meeting / Postal Ballot-Outcome of Postal_Ballot", "AGM/EGM", "Postal Ballot"),
     ]
     for headline, category, subcategory in cases:
         assert classify(filing(headline=headline, category=category, subcategory=subcategory)) == "kill", headline
@@ -26,27 +27,67 @@ def test_spec_low_list():
         ("Announcement under Regulation 30 (LODR)-Analyst / Investor Meet - Intimation", "Company Update", "Analyst / Investor Meet"),
         ("Dividend Intimation", "Corp. Action", "Dividend"),
         ("Notice of AGM", "AGM/EGM", "AGM"),
-        ("Incorporation of a Wholly Owned Subsidiary", "Company Update", "General"),
+        ("Announcement under Regulation 30 (LODR)-Press Release / Media Release", "Company Update", "Press Release / Media Release"),
+        ("Rumour verification - Regulation 30(11)", "Others", ""),
+        ("Announcement under Regulation 30 (LODR)-Change in Management", "Company Update", "Change in Management", "Intimation of change in Senior Managerial Personnel"),
+        ("Brand new category", "Mystery", ""),
+        ("Announcement under Regulation 30 (LODR)-Award of Order", "Company Update", "Award of Order / Receipt of Order"),
     ]
-    for headline, category, subcategory in cases:
-        assert classify(filing(headline=headline, category=category, subcategory=subcategory)) == "low", headline
+    for row in cases:
+        headline, category, subcategory, *rest = row
+        detail = rest[0] if rest else ""
+        assert classify(filing(headline=headline, category=category, subcategory=subcategory, detail=detail)) == "low", headline
 
 
-def test_spec_candidate_and_unknown():
+def test_change_in_management_candidate_only_for_named_roles():
+    low = filing(
+        headline="Announcement under Regulation 30 (LODR)-Change in Management",
+        category="Company Update",
+        subcategory="Change in Management",
+        detail="Cessation of Independent Director pursuant to completion of tenure.",
+    )
+    high = filing(
+        headline="Announcement under Regulation 30 (LODR)-Change in Management",
+        category="Company Update",
+        subcategory="Change in Management",
+        detail="Resignation of Director and appointment of CFO",
+    )
+    assert classify(low) == "low"
+    assert classify(high) == "candidate"
+
+
+def test_priority_sebi_order_on_general():
+    row = filing(
+        headline="SEBI Order No.WTM/SP/CFID/CFID_4/32427/2026-27 Dated 29Th May 2026",
+        category="Company Update",
+        subcategory="General",
+        detail="Disclosure regarding penalty",
+    )
+    assert classify(row) == "priority"
+    plain = filing(
+        headline="Vesting Of Options Under Employee Stock Option Plan 2022",
+        category="Company Update",
+        subcategory="General",
+    )
+    assert classify(plain) == "candidate"
+
+
+def test_spec_candidate_pairs():
     cases = [
         ("Board Meeting Intimation for unaudited financial results", "Board Meeting", "Board Meeting"),
         ("Outcome Of The Board Meeting Dated 28Th July 2026.", "Result", "Financial Results"),
+        ("Board Meeting Outcome for Outcome Of The Board Meeting Dated 28Th July 2026.", "Board Meeting", "Outcome of Board Meeting"),
         ("Announcement under Regulation 30 (LODR)-Investor Presentation", "Company Update", "Investor Presentation"),
         ("Announcement under Regulation 30 (LODR)-Earnings Call Transcript", "Company Update", "Earnings Call Transcript"),
-        ("Announcement under Regulation 30 (LODR)-Award of Order", "Company Update", "Award of Order / Receipt of Order"),
-        ("Credit Rating", "Company Update", "Credit Rating"),
-        ("Change in Management", "Company Update", "Change in Management"),
-        ("Scheme of Arrangement", "Company Update", "Scheme of Arrangement"),
-        ("Something we have never seen", "Company Update", "General"),
-        ("Brand new category", "Mystery", ""),
+        ("Announcement under Regulation 30 (LODR)-Scheme of Arrangement", "Company Update", "Scheme of Arrangement"),
+        ("Vesting Of Options Under Employee Stock Option Plan 2022", "Company Update", "General"),
     ]
     for headline, category, subcategory in cases:
         assert classify(filing(headline=headline, category=category, subcategory=subcategory)) == "candidate", headline
+
+
+def test_unknown_is_low_not_candidate():
+    assert classify(filing(headline="Brand new category", category="Mystery", subcategory="")) == "low"
 
 
 def test_fixture_trading_window_is_kill():

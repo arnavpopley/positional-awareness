@@ -107,11 +107,17 @@ Quote snapshot (delayed, not a live ticker) → return vs cost on the row.
 | Order / book / rating / pledge | Only if it maps to a named KPI. Then S | Same rec format |
 | Gated industry (peers) or key own-price move | News/peer x=0 unless mapped. Price = own 20d | Ping **only if S band changes** |
 
-**Kill (store, never score, never ping):** trading window closure, ESOP allotment, newspaper publication of results, record date, book closure, RTA/registrar certs, investor complaint statements, loss/duplicate shares, compliance certs (Reg 74(5) etc.), AGM procedural notices.
+**Kill (store, never score, never ping):** trading window closure, ESOP allotment, newspaper publication of results, record date, book closure, RTA/registrar certs, investor complaint statements, loss/duplicate shares, compliance certs (Reg 74(5) etc.), AGM procedural notices, **AGM/EGM postal ballot**. Matched on `(category, subcategory)` unless a headline rule is named.
 
-**Low (store, no push):** analyst meet intimations, dividend intimations, AGM agenda, routine subsidiary incorporation, RTA/secretarial role changes.
+**Low (store, no push):** analyst meet intimations, dividend intimations, AGM agenda, routine subsidiary incorporation, RTA/secretarial role changes, **press release / media release**, **Others with empty subcategory**, **rumour verification** (headline contains “Rumour verification” or “Regulation 30(11)”). **Unknown or unmapped category → low** (stored, visible, never pushed).
 
-**Candidate:** board meeting (results date), financial results, investor presentations, con-call transcripts, order awards, credit ratings, pledge/SAST, KMP/auditor/director changes, fund raise, acquisitions, regulatory actions, guidance/clarification, Company Update whose subcategory is not killed. Unknown category → candidate.
+**Candidate:** board meeting intimation (`Board Meeting` / `Board Meeting`), board meeting outcome, financial results, investor presentations, con-call transcripts, scheme of arrangement, `Company Update` / `General` (unless priority). **Change in Management** is candidate only if the headline or PDF title names Managing Director / MD, Chief Executive / CEO, Chief Financial / CFO, Whole-time Director, Auditor, or Resignation of Director; otherwise low.
+
+**Priority (always notify when fresh; above candidate):** `Company Update` / `General` whose headline contains “SEBI Order”, “Adjudication”, “Show Cause”, or “Penalty”. Recency guard still applies. No digest or batching may swallow a fresh priority filing.
+
+**Recency guard:** never notify on a filing whose `filed_at` is older than **48 hours** at poll time. Independent of an empty database and of `--notify-backfill`. Stale rows are still stored and classified.
+
+**Collapse:** the same results print is often filed twice (`Board Meeting` / `Outcome of Board Meeting` and `Result` / `Financial Results`) within 24 hours. Store both. Notify once, preferring the Financial Results row. Set `collapsed_into` on the suppressed outcome to the results `filing_id`.
 
 PDFs: download, `pdfplumber`. Near-empty text → `needs_manual_read`, still notify with the link, **block Buy**.
 
