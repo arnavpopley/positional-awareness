@@ -148,7 +148,7 @@ PDFs: download, `pdfplumber`. Near-empty text → `needs_manual_read`, still not
 - **BSE primary.** Unofficial `AnnGetData` JSON; browser-like User-Agent + Referer; filter by scrip code + date.
 - **NSE:** only if a holding is NSE-only.
 - **Prices:** delayed public quotes (Yahoo or similar) or Groww LTP later. v1: delayed quotes + ledger qty/cost.
-- **Groww holdings:** `GET https://api.groww.in/v1/holdings/user` from `pos sync` only. Thin `requests` client; no growwapi SDK. Token from `.env`. Cache in SQLite; CLI reads the cache.
+- **Groww holdings:** `GROWW_API_KEY` + `GROWW_API_SECRET` in `.env`. `pos sync` exchanges them (`POST /v1/token/api/access`, checksum SHA256(secret+timestamp)) for a daily access token, then `GET /v1/holdings/user`. Thin `requests` client; no growwapi SDK. Optional `GROWW_ACCESS_TOKEN` skips the exchange. Cache holdings in SQLite; CLI reads the cache.
 - **LLM:** Gemini Flash (Google AI Studio). Structured JSON. Temperature 0. One call per candidate or priority filing, never per poll. Cached by filing hash. Prompt is SPEC §9 verbatim. Groq+Llama optional fallback.
 - **Industry v1:** peer KPI prints from ledger names sharing `sector`. No RSS until Phase 1b.
 

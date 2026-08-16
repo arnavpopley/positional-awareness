@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import sys
+import time
 
 import requests
 from dotenv import load_dotenv
@@ -10,10 +12,11 @@ from src.paths import ROOT
 from src.portfolio.base import Holding, Portfolio
 
 HOLDINGS_URL = "https://api.groww.in/v1/holdings/user"
+TOKEN_URL = "https://api.groww.in/v1/token/api/access"
 
 
 class GrowwError(RuntimeError):
-    """Holdings request failed. Message must never contain the access token."""
+    """Holdings request failed. Message must never contain credentials."""
 
 
 class _RedactedBearer(requests.auth.AuthBase):
@@ -28,30 +31,101 @@ class _RedactedBearer(requests.auth.AuthBase):
         return "<redacted>"
 
 
-def _redact(text: str, token: str) -> str:
-    if token and token in text:
-        return text.replace(token, "<redacted>")
+def _redact(text: str, *secrets: str) -> str:
+    for secret in secrets:
+        if secret and secret in text:
+            text = text.replace(secret, "<redacted>")
     return text
 
 
+def checksum(secret: str, timestamp: str) -> str:
+    """SHA-256 of api_secret + epoch-seconds, as specified by Groww."""
+    return hashlib.sha256(f"{secret}{timestamp}".encode("utf-8")).hexdigest()
+
+
+def _parse_access_token(payload: object) -> str:
+    if not isinstance(payload, dict):
+        raise GrowwError("Groww token request failed")
+    token = payload.get("token")
+    if isinstance(token, str) and token.strip():
+        return token.strip()
+    inner = payload.get("payload")
+    if isinstance(inner, dict):
+        nested = inner.get("token")
+        if isinstance(nested, str) and nested.strip():
+            return nested.strip()
+    raise GrowwError("Groww token request failed")
+
+
 class GrowwPortfolio(Portfolio):
-    """Read-only holdings endpoint. Do not import growwapi; no order surface."""
+    """Read-only holdings. API key + secret in .env; no growwapi SDK."""
 
     def __init__(
         self,
         token: str | None = None,
         *,
+        api_key: str | None = None,
+        api_secret: str | None = None,
         session: requests.Session | None = None,
+        timestamp: str | None = None,
     ) -> None:
-        if token is None:
+        if api_key is None or api_secret is None or token is None:
             load_dotenv(ROOT / ".env")
+        if api_key is None:
+            api_key = os.environ.get("GROWW_API_KEY") or ""
+        if api_secret is None:
+            api_secret = os.environ.get("GROWW_API_SECRET") or ""
+        if token is None:
             token = os.environ.get("GROWW_ACCESS_TOKEN") or ""
+        self._api_key = api_key
+        self._api_secret = api_secret
         self._token = token
+        self._timestamp = timestamp
         self._session = session or requests.Session()
 
+    def _secrets(self, *extra: str) -> tuple[str, ...]:
+        return (self._api_key, self._api_secret, self._token, *extra)
+
+    def _exchange_access_token(self) -> str:
+        ts = self._timestamp or str(int(time.time()))
+        body = {
+            "key_type": "approval",
+            "checksum": checksum(self._api_secret, ts),
+            "timestamp": ts,
+        }
+        try:
+            response = self._session.post(
+                TOKEN_URL,
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "X-API-VERSION": "1.0",
+                },
+                json=body,
+                auth=_RedactedBearer(self._api_key),
+                timeout=15,
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except requests.RequestException as exc:
+            raise GrowwError(
+                _redact(f"Groww token request failed: {exc}", *self._secrets())
+            ) from None
+        except ValueError:
+            raise GrowwError("Groww token request failed") from None
+        if str(payload.get("status") or "").upper() == "FAILURE":
+            raise GrowwError("Groww token request failed")
+        return _parse_access_token(payload)
+
+    def _access_token(self) -> str:
+        if self._api_key and self._api_secret:
+            return self._exchange_access_token()
+        if self._token:
+            return self._token
+        raise GrowwError("GROWW_API_KEY and GROWW_API_SECRET are missing")
+
     def fetch(self) -> list[Holding]:
-        if not self._token:
-            raise GrowwError("GROWW_ACCESS_TOKEN is missing")
+        access = self._access_token()
         try:
             response = self._session.get(
                 HOLDINGS_URL,
@@ -59,14 +133,17 @@ class GrowwPortfolio(Portfolio):
                     "Accept": "application/json",
                     "X-API-VERSION": "1.0",
                 },
-                auth=_RedactedBearer(self._token),
+                auth=_RedactedBearer(access),
                 timeout=15,
             )
             response.raise_for_status()
             payload = response.json()
         except requests.RequestException as exc:
             raise GrowwError(
-                _redact(f"Groww holdings request failed: {exc}", self._token)
+                _redact(
+                    f"Groww holdings request failed: {exc}",
+                    *self._secrets(access),
+                )
             ) from None
         except ValueError:
             raise GrowwError("Groww holdings request failed") from None

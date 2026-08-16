@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -13,13 +14,16 @@ from src.cli import render_table, sync_command, sync_holdings
 from src.ledger import Ticker, parse_ticker
 from src.main import poll_fixture
 from src.portfolio.base import Holding
-from src.portfolio.groww import GrowwError, GrowwPortfolio
+from src.portfolio.groww import GrowwError, GrowwPortfolio, checksum
 from src.portfolio.reconcile import reconcile
 from src.portfolio.yaml_portfolio import YamlPortfolio
 from src.store import Store
 
 FIXTURE = Path("tests/fixtures/groww_holdings.json")
 SECRET = "groww-test-token-do-not-leak-9f3a"
+API_KEY = "groww-test-api-key-do-not-leak-aa11"
+API_SECRET = "groww-test-api-secret-do-not-leak-bb22"
+EXCHANGED = "groww-exchanged-access-do-not-leak-cc33"
 
 
 def _ticker(
@@ -49,6 +53,8 @@ def _holding(symbol: str, *, qty: float = 100, avg_cost: float = 45.5, isin: str
 
 def test_yaml_portfolio_reads_example_without_groww_token(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("GROWW_ACCESS_TOKEN", raising=False)
+    monkeypatch.delenv("GROWW_API_KEY", raising=False)
+    monkeypatch.delenv("GROWW_API_SECRET", raising=False)
     holdings = YamlPortfolio(Path("config/tickers.example.yaml")).fetch()
     assert holdings[0].symbol == "SUZLON"
     assert holdings[0].qty == 0
@@ -84,6 +90,11 @@ def test_reconcile_qty_drift():
     ]
 
 
+def test_checksum_is_sha256_of_secret_plus_timestamp():
+    ts = "1719830400"
+    assert checksum("s3cret", ts) == hashlib.sha256(b"s3cret1719830400").hexdigest()
+
+
 def test_groww_fetch_parses_fixture_and_does_not_hit_network():
     payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
     session = MagicMock()
@@ -92,16 +103,51 @@ def test_groww_fetch_parses_fixture_and_does_not_hit_network():
     response.raise_for_status.return_value = None
     session.get.return_value = response
 
-    holdings = GrowwPortfolio(token=SECRET, session=session).fetch()
+    holdings = GrowwPortfolio(
+        token=SECRET, api_key="", api_secret="", session=session
+    ).fetch()
     assert holdings == [
         Holding(symbol="SUZLON", isin="INE040H01021", qty=100.0, avg_cost=45.5)
     ]
     url = session.get.call_args.args[0]
     assert url == "https://api.groww.in/v1/holdings/user"
     assert "positions" not in url
+    session.post.assert_not_called()
     headers = session.get.call_args.kwargs.get("headers") or {}
     assert "Authorization" not in headers
     assert SECRET not in repr(session.get.call_args)
+
+
+def test_key_and_secret_exchange_for_access_token():
+    payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    session = MagicMock()
+    token_resp = MagicMock()
+    token_resp.json.return_value = {"status": "SUCCESS", "payload": {"token": EXCHANGED}}
+    token_resp.raise_for_status.return_value = None
+    holdings_resp = MagicMock()
+    holdings_resp.json.return_value = payload
+    holdings_resp.raise_for_status.return_value = None
+    session.post.return_value = token_resp
+    session.get.return_value = holdings_resp
+    ts = "1719830400"
+
+    holdings = GrowwPortfolio(
+        api_key=API_KEY,
+        api_secret=API_SECRET,
+        token="",
+        session=session,
+        timestamp=ts,
+    ).fetch()
+    assert holdings[0].symbol == "SUZLON"
+    post_url = session.post.call_args.args[0]
+    assert post_url == "https://api.groww.in/v1/token/api/access"
+    body = session.post.call_args.kwargs["json"]
+    assert body["key_type"] == "approval"
+    assert body["timestamp"] == ts
+    assert body["checksum"] == checksum(API_SECRET, ts)
+    assert API_SECRET not in repr(session.post.call_args)
+    assert session.get.call_args.kwargs["auth"]._token == EXCHANGED
+    assert session.post.call_args.kwargs["auth"]._token == API_KEY
 
 
 def test_token_never_appears_in_stdout_or_exception(capsys: pytest.CaptureFixture[str]):
@@ -110,11 +156,27 @@ def test_token_never_appears_in_stdout_or_exception(capsys: pytest.CaptureFixtur
         f"401 Client Error token={SECRET} for url=https://api.groww.in/v1/holdings/user"
     )
     with pytest.raises(GrowwError) as caught:
-        GrowwPortfolio(token=SECRET, session=session).fetch()
+        GrowwPortfolio(token=SECRET, api_key="", api_secret="", session=session).fetch()
     assert SECRET not in str(caught.value)
     captured = capsys.readouterr()
     assert SECRET not in captured.out
     assert SECRET not in captured.err
+
+
+def test_api_secret_never_appears_when_token_exchange_fails(capsys: pytest.CaptureFixture[str]):
+    session = MagicMock()
+    session.post.side_effect = requests.HTTPError(
+        f"401 Client Error key={API_KEY} secret={API_SECRET}"
+    )
+    with pytest.raises(GrowwError) as caught:
+        GrowwPortfolio(
+            api_key=API_KEY, api_secret=API_SECRET, token="", session=session
+        ).fetch()
+    assert API_KEY not in str(caught.value)
+    assert API_SECRET not in str(caught.value)
+    captured = capsys.readouterr()
+    assert API_KEY not in captured.out
+    assert API_SECRET not in captured.err
 
 
 def test_sync_caches_and_cli_table_shows_thesis_less_count(tmp_path: Path):
