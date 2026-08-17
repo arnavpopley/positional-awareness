@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from src.ledger import Ticker
 from src.portfolio.reconcile import thesis_less_holdings
-from src.quotes import last_price, pct_return
+from src.quotes import pct_return
 from src.store import Store
 
 
@@ -45,7 +45,7 @@ class BookRow:
     status: str
     qty: str
     avg_cost: str
-    last: str
+    cmp: str
     ret: str
     ret_value: float | None
     S: str
@@ -60,14 +60,17 @@ def book_rows(
     store: Store,
     *,
     fetch_quotes: bool = True,
+    prices: dict[str, float] | None = None,
 ) -> tuple[int, list[BookRow]]:
     cached = store.holdings_cache()
     missing = len(thesis_less_holdings(tickers, cached)) + sum(
         1 for t in tickers if t.status == "no_thesis"
     )
+    if prices is None:
+        prices = _cmp_prices(tickers) if fetch_quotes else {}
     rows: list[BookRow] = []
     for ticker in table_order(tickers):
-        last = last_price(ticker) if fetch_quotes else None
+        last = prices.get(ticker.symbol)
         score_row = store.latest_score(ticker.symbol)
         s_val = None if score_row is None or score_row["S"] is None else float(score_row["S"])
         band = "—" if score_row is None or not score_row["band"] else str(score_row["band"])
@@ -81,7 +84,7 @@ def book_rows(
                 status=ticker.status,
                 qty=fmt_qty(ticker.qty),
                 avg_cost=fmt_price(ticker.avg_cost),
-                last=fmt_price(last),
+                cmp=fmt_price(last),
                 ret=fmt_ret(ret_val),
                 ret_value=ret_val,
                 S=fmt_s(s_val),
@@ -92,3 +95,12 @@ def book_rows(
             )
         )
     return missing, rows
+
+
+def _cmp_prices(tickers: list[Ticker]) -> dict[str, float]:
+    from src.portfolio.groww import GrowwError, GrowwPortfolio
+
+    try:
+        return GrowwPortfolio().ltp_map(tickers)
+    except GrowwError:
+        return {}

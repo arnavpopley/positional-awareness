@@ -170,9 +170,9 @@ PDFs: download, `pdfplumber`. Near-empty text → `needs_manual_read`, still not
 
 ### 4. v1 surface
 
-- **CLI table:** name, return vs cost, last S, band, thesis, KPI series, next earnings date. `no_thesis` rows sit at the top. Thesis-less Groww holdings plus ledger `no_thesis` names count as outstanding (cache only, never the live API).
-- **Local page:** `pos web` — read-only FastAPI on `127.0.0.1`. Optional `config/launchd-web.plist.example` keeps it up.
-- **Hosted snapshot (optional):** `pos publish` writes a static copy; `pos deploy` pushes it to Vercel behind `PA_SITE_PASSWORD`. Not live. Not in git. No orders.
+- **CLI table:** name, CMP, return vs cost, last S, band, thesis, KPI series, next earnings date. `no_thesis` rows sit at the top. Thesis-less Groww holdings plus ledger `no_thesis` names count as outstanding (cache only, never the live API).
+- **Local page:** `pos web` — read-only FastAPI on `127.0.0.1`. Optional `config/launchd-web.plist.example` keeps it up. CMP/return fill from Groww LTP via `/api/quotes`.
+- **Hosted snapshot (optional):** `pos publish` / `pos deploy` bake Groww CMP and return into the static copy, then push to Vercel behind `PA_SITE_PASSWORD`. Not live. Groww keys stay on the Mac. Not in git. No orders.
 - **`pos sync`:** read-only Groww holdings vs ledger. Report drift and `NO_THESIS` ledger rows; do not write the ledger.
 - **`pos context <TICKER>`:** local markdown dump (thesis, conditions with severity, currently touched conditions, filings, KPI history, decisions) for pasting into an external chat. No LLM call, no network. `--filings N` and `--since YYYY-MM-DD`.
 - **`pos decide SYMBOL ACTION [NOTE] [--anticipatory]`:** user stamp into `decisions`. `--anticipatory` marks a decision made ahead of a results print. `pos decisions --anticipatory` lists only those.
@@ -186,8 +186,8 @@ PDFs: download, `pdfplumber`. Near-empty text → `needs_manual_read`, still not
 
 - **BSE primary.** Unofficial `AnnGetData` JSON; browser-like User-Agent + Referer; filter by scrip code + date.
 - **NSE:** only if a holding is NSE-only.
-- **Prices:** delayed public quotes (Yahoo or similar) or Groww LTP later. v1: delayed quotes + ledger qty/cost.
-- **Groww holdings:** `GROWW_API_KEY` + `GROWW_API_SECRET` in `.env`. `pos sync` exchanges them (`POST /v1/token/api/access`, checksum SHA256(secret+timestamp)) for a daily access token, then `GET /v1/holdings/user`. Thin `requests` client; no growwapi SDK. Optional `GROWW_ACCESS_TOKEN` skips the exchange. Cache holdings in SQLite; CLI reads the cache.
+- **Prices:** book CMP and return vs cost from Groww LTP (`GET /v1/live-data/ltp`, segment CASH, `NSE_{nse_symbol}` then `BSE_{nse_symbol}`). Same keys as `pos sync`. Not a websocket. Scorecard own-price factor is still the name’s delayed move, not vs Nifty. `python -m src.quotes` remains the BSE header probe.
+- **Groww holdings:** `GROWW_API_KEY` + `GROWW_API_SECRET` in `.env`. `pos sync` exchanges them (`POST /v1/token/api/access`, checksum SHA256(secret+timestamp)) for a daily access token, then `GET /v1/holdings/user`. Thin `requests` client; no growwapi SDK. Optional `GROWW_ACCESS_TOKEN` skips the exchange. Cache holdings in SQLite; CLI reads the cache. LTP uses the same token exchange; the poller never calls Groww.
 - **LLM:** Gemini Flash (Google AI Studio). Structured JSON. Temperature 0. One call per candidate or priority filing, never per poll. Cached by filing hash. Prompt is SPEC §9 verbatim. Groq+Llama optional fallback.
 - **Industry v1:** peer KPI prints from ledger names sharing `sector`. No RSS until Phase 1b.
 
@@ -218,7 +218,7 @@ PDFs: download, `pdfplumber`. Near-empty text → `needs_manual_read`, still not
 1. `config/tickers.yaml` — user fills real holdings. `held` enforces thesis + ≥1 condition at load. Other statuses load without conditions. Never auto-assign status.
 2. BSE source + dedupe + SQLite.
 3. Kill-list filter.
-4. CLI table + delayed quotes (return vs cost).
+4. CLI table + Groww CMP (return vs cost).
 5. macOS notify for **candidate** filings (headline + link) before LLM is on — so the pipe is testable.
 6. Scheduler with the **slot / results-week / results-morning** cadence above.
 
@@ -234,7 +234,6 @@ Ship when: a board-meeting or results filing for a held ticker produces a macOS 
 **Phase 1b (later)**
 
 - Telegram push (same events as macOS).
-- Groww LTP. Holdings sync is `pos sync` (already in tree).
 - Gated industry RSS.
 - NSE for NSE-only names.
 

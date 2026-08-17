@@ -29,7 +29,7 @@ def render_table(
                 row.symbol,
                 row.qty,
                 row.avg_cost,
-                row.last,
+                row.cmp,
                 row.ret,
                 row.S,
                 row.band,
@@ -38,7 +38,7 @@ def render_table(
             )
             for row in book
         ]
-        headers = ("SYMBOL", "QTY", "AVG COST", "LAST", "RETURN", "S", "BAND", "THESIS", "NEXT")
+        headers = ("SYMBOL", "QTY", "AVG COST", "CMP", "RETURN", "S", "BAND", "THESIS", "NEXT")
     finally:
         if own_store:
             store.close()
@@ -159,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--no-quotes",
         action="store_true",
-        help="skip delayed quotes (offline / tests)",
+        help="skip Groww CMP (offline / tests)",
     )
     sub = parser.add_subparsers(dest="command")
     sub.add_parser(
@@ -207,19 +207,21 @@ def main(argv: list[str] | None = None) -> int:
         "--no-quotes",
         action="store_true",
         dest="web_no_quotes",
-        help="skip delayed quotes",
+        help="skip Groww CMP",
     )
     pub = sub.add_parser("publish", help="write a static snapshot (gitignored site/)")
     pub.add_argument(
-        "--quotes",
+        "--no-quotes",
         action="store_true",
-        help="bake delayed quotes into the snapshot",
+        dest="publish_no_quotes",
+        help="skip Groww CMP (offline)",
     )
     dep = sub.add_parser("deploy", help="publish a password-gated snapshot to Vercel")
     dep.add_argument(
-        "--quotes",
+        "--no-quotes",
         action="store_true",
-        help="bake delayed quotes into the snapshot",
+        dest="deploy_no_quotes",
+        help="skip Groww CMP (offline)",
     )
     args = parser.parse_args(argv)
     try:
@@ -252,11 +254,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "publish":
             from src.web.publish import main as publish_main
 
-            return publish_main(["--quotes"] if args.quotes else [])
+            return publish_main(["--no-quotes"] if args.publish_no_quotes else [])
         if args.command == "deploy":
             from src.web.deploy import main as deploy_main
 
-            return deploy_main(["--quotes"] if args.quotes else [])
+            return deploy_main(["--no-quotes"] if args.deploy_no_quotes else [])
         print(render_table(fetch_quotes=not args.no_quotes))
         return 0
     except LedgerError as exc:

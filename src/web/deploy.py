@@ -56,7 +56,7 @@ def ensure_password() -> tuple[str, bool]:
     return password, True
 
 
-def stage_deploy(dest: Path, *, fetch_quotes: bool = False) -> Path:
+def stage_deploy(dest: Path, *, fetch_quotes: bool = True) -> Path:
     site = publish(dest / "snapshot", fetch_quotes=fetch_quotes)
     shutil.copy(HOST / "vercel.json", dest / "vercel.json")
     shutil.copy(HOST / "login.html", dest / "login.html")
@@ -80,7 +80,7 @@ def _logged_in() -> bool:
     return result.returncode == 0 and "Logged out" not in out
 
 
-def deploy(*, fetch_quotes: bool = False) -> int:
+def deploy(*, fetch_quotes: bool = True) -> int:
     password, created = ensure_password()
     if created:
         print(f"stored {PASSWORD_KEY} in .env (gitignored)")
@@ -111,12 +111,12 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description="Publish a password-gated snapshot to Vercel")
     parser.add_argument(
-        "--quotes",
+        "--no-quotes",
         action="store_true",
-        help="bake delayed quotes into the snapshot",
+        help="skip Groww CMP (offline)",
     )
     args = parser.parse_args(argv)
-    return deploy(fetch_quotes=args.quotes)
+    return deploy(fetch_quotes=not args.no_quotes)
 
 
 if __name__ == "__main__":

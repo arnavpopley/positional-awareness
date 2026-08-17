@@ -11,7 +11,8 @@ from fastapi.templating import Jinja2Templates
 
 from src.ledger import LedgerError, Ticker, by_symbol, load_tickers
 from src.paths import TICKERS_PATH
-from src.quotes import last_price, pct_return
+from src.portfolio.groww import GrowwError, GrowwPortfolio
+from src.quotes import pct_return
 from src.store import Store
 from src.view import fmt_price, fmt_ret
 from src.web.render import index_context, name_context
@@ -56,15 +57,17 @@ def create_app(
 
     @app.get("/api/quotes")
     def api_quotes() -> dict[str, dict]:
-        import requests as req
-
-        sess = req.Session()
+        book = _book()
+        try:
+            prices = GrowwPortfolio().ltp_map(book)
+        except GrowwError:
+            prices = {}
         out: dict[str, dict] = {}
-        for ticker in _book():
-            last = last_price(ticker, sess, timeout=4)
+        for ticker in book:
+            last = prices.get(ticker.symbol)
             ret = pct_return(last, ticker.avg_cost)
             out[ticker.symbol] = {
-                "last": fmt_price(last),
+                "cmp": fmt_price(last),
                 "ret": fmt_ret(ret),
                 "up": ret is not None and ret > 0,
                 "down": ret is not None and ret < 0,
@@ -110,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--no-quotes",
         action="store_true",
-        help="skip delayed quotes",
+        help="skip Groww CMP",
     )
     args = parser.parse_args(argv)
     if args.host not in {"127.0.0.1", "localhost", "::1"}:

@@ -41,11 +41,14 @@ def index_context(
     store: Store,
     *,
     fetch_quotes: bool = False,
+    prices: dict[str, float] | None = None,
     hosted: bool = False,
     pulse: bool = True,
     defer_quotes: bool = False,
 ) -> dict:
-    missing, rows = book_rows(tickers, store, fetch_quotes=fetch_quotes)
+    missing, rows = book_rows(
+        tickers, store, fetch_quotes=fetch_quotes, prices=prices
+    )
     ctx = flags(hosted=hosted, pulse=pulse, defer_quotes=defer_quotes)
     ctx.update({"missing": missing, "rows": rows})
     return ctx
@@ -57,16 +60,25 @@ def name_context(
     *,
     hosted: bool = False,
     pulse: bool = True,
+    fetch_quotes: bool = False,
+    prices: dict[str, float] | None = None,
 ) -> dict:
     score_row = store.latest_score(ticker.symbol)
     s_val = None if score_row is None or score_row["S"] is None else float(score_row["S"])
     band = "" if score_row is None or not score_row["band"] else str(score_row["band"])
+    _, rows = book_rows(
+        [ticker], store, fetch_quotes=fetch_quotes, prices=prices
+    )
+    row = rows[0] if rows else None
     ctx = flags(hosted=hosted, pulse=pulse, defer_quotes=False)
     ctx.update(
         {
             "ticker": ticker,
             "qty": fmt_qty(ticker.qty),
             "avg_cost": fmt_price(ticker.avg_cost),
+            "cmp": row.cmp if row else "—",
+            "ret": row.ret if row else "—",
+            "ret_value": row.ret_value if row else None,
             "S": fmt_s(s_val),
             "band": band,
             "low_confidence": bool(score_row["low_confidence"]) if score_row else False,

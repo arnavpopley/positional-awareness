@@ -8,10 +8,12 @@ import time
 import requests
 from dotenv import load_dotenv
 
+from src.ledger import Ticker
 from src.paths import ROOT
 from src.portfolio.base import Holding, Portfolio
 
 HOLDINGS_URL = "https://api.groww.in/v1/holdings/user"
+LTP_URL = "https://api.groww.in/v1/live-data/ltp"
 TOKEN_URL = "https://api.groww.in/v1/token/api/access"
 
 
@@ -167,6 +169,69 @@ class GrowwPortfolio(Portfolio):
                 )
             )
         return holdings
+
+    def ltp_map(self, tickers: list[Ticker]) -> dict[str, float]:
+        """Groww CMP keyed by ledger symbol. Read-only. Never places a trade."""
+        keys: list[str] = []
+        seen: set[str] = set()
+        for ticker in tickers:
+            for key in _cash_keys(ticker):
+                if key not in seen:
+                    seen.add(key)
+                    keys.append(key)
+        if not keys:
+            return {}
+        access = self._access_token()
+        try:
+            response = self._session.get(
+                LTP_URL,
+                params={"segment": "CASH", "exchange_symbols": ",".join(keys)},
+                headers={
+                    "Accept": "application/json",
+                    "X-API-VERSION": "1.0",
+                },
+                auth=_RedactedBearer(access),
+                timeout=15,
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except requests.RequestException as exc:
+            raise GrowwError(
+                _redact(
+                    f"Groww LTP request failed: {exc}",
+                    *self._secrets(access),
+                )
+            ) from None
+        except ValueError:
+            raise GrowwError("Groww LTP request failed") from None
+        if str(payload.get("status") or "").upper() != "SUCCESS":
+            raise GrowwError("Groww LTP request failed")
+        raw = payload.get("payload") or {}
+        if not isinstance(raw, dict):
+            raise GrowwError("Groww LTP request failed")
+        out: dict[str, float] = {}
+        for ticker in tickers:
+            for key in _cash_keys(ticker):
+                price = _as_price(raw.get(key))
+                if price is None:
+                    continue
+                out[ticker.symbol] = price
+                break
+        return out
+
+
+def _cash_keys(ticker: Ticker) -> tuple[str, ...]:
+    nse = (ticker.nse_symbol or ticker.symbol).strip().upper()
+    return (f"NSE_{nse}", f"BSE_{nse}")
+
+
+def _as_price(value: object) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(str(value).replace(",", ""))
+    except (TypeError, ValueError):
+        return None
 
 
 def main(argv: list[str] | None = None) -> int:

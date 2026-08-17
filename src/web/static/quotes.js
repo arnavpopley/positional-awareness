@@ -5,9 +5,9 @@ fetch("/api/quotes")
   .then(function (data) {
     Object.keys(data).forEach(function (symbol) {
       var quote = data[symbol];
-      var last = document.getElementById("last-" + symbol);
+      var cmp = document.getElementById("cmp-" + symbol);
       var ret = document.getElementById("ret-" + symbol);
-      if (last) last.textContent = quote.last;
+      if (cmp) cmp.textContent = quote.cmp;
       if (ret) {
         ret.textContent = quote.ret;
         ret.classList.toggle("up", quote.up);

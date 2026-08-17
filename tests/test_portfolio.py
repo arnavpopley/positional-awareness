@@ -126,6 +126,36 @@ def test_groww_fetch_parses_fixture_and_does_not_hit_network():
     assert SECRET not in repr(session.get.call_args)
 
 
+def test_ltp_map_parses_fixture_and_uses_nse_symbol():
+    payload = json.loads(Path("tests/fixtures/groww_ltp.json").read_text(encoding="utf-8"))
+    session = MagicMock()
+    response = MagicMock()
+    response.json.return_value = payload
+    response.raise_for_status.return_value = None
+    session.get.return_value = response
+    ticker = parse_ticker(
+        {
+            "symbol": "SBI",
+            "nse_symbol": "SBIN",
+            "bse_code": "1",
+            "thesis": "Why this position exists.",
+            "kpis": [{"name": "rev", "severity": "material"}],
+        }
+    )
+
+    prices = GrowwPortfolio(
+        token=SECRET, api_key="", api_secret="", session=session
+    ).ltp_map([ticker])
+    assert prices == {"SBI": 1064.0}
+    url = session.get.call_args.args[0]
+    assert url == "https://api.groww.in/v1/live-data/ltp"
+    params = session.get.call_args.kwargs["params"]
+    assert params["segment"] == "CASH"
+    assert "NSE_SBIN" in params["exchange_symbols"]
+    assert "BSE_SBIN" in params["exchange_symbols"]
+    assert SECRET not in repr(session.get.call_args)
+
+
 def test_key_and_secret_exchange_for_access_token():
     payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
     session = MagicMock()

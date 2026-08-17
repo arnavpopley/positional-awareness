@@ -7,6 +7,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from src.ledger import LedgerError, Ticker, load_tickers
+from src.portfolio.groww import GrowwError, GrowwPortfolio
 from src.store import Store
 from src.web.render import index_context, name_context
 
@@ -31,7 +32,7 @@ def publish(
     *,
     tickers: list[Ticker] | None = None,
     store: Store | None = None,
-    fetch_quotes: bool = False,
+    fetch_quotes: bool = True,
 ) -> Path:
     """Write a static snapshot. Holdings stay off git. Never places a trade."""
     own_store = store is None
@@ -39,6 +40,14 @@ def publish(
     tickers = tickers if tickers is not None else load_tickers()
     store = store or Store()
     try:
+        prices: dict[str, float] = {}
+        if fetch_quotes:
+            try:
+                prices = GrowwPortfolio().ltp_map(tickers)
+            except GrowwError as exc:
+                raise LedgerError(str(exc)) from exc
+            if tickers and not prices:
+                raise LedgerError("Groww CMP unavailable")
         dest.mkdir(parents=True, exist_ok=True)
         static_dest = dest / "static"
         if static_dest.exists():
@@ -50,7 +59,8 @@ def publish(
             index_context(
                 tickers,
                 store,
-                fetch_quotes=fetch_quotes,
+                fetch_quotes=False,
+                prices=prices,
                 hosted=True,
                 pulse=False,
                 defer_quotes=False,
@@ -64,7 +74,13 @@ def publish(
         for ticker in tickers:
             html = render_html(
                 "name.html",
-                name_context(ticker, store, hosted=True, pulse=False),
+                name_context(
+                    ticker,
+                    store,
+                    hosted=True,
+                    pulse=False,
+                    prices=prices,
+                ),
             )
             (pages / f"{ticker.symbol}.html").write_text(html, encoding="utf-8")
             names[f"/t/{ticker.symbol}"] = html
@@ -84,13 +100,13 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description="Write a static snapshot for Vercel")
     parser.add_argument(
-        "--quotes",
+        "--no-quotes",
         action="store_true",
-        help="bake delayed quotes into the snapshot",
+        help="skip Groww CMP (offline)",
     )
     args = parser.parse_args(argv)
     try:
-        dest = publish(fetch_quotes=args.quotes)
+        dest = publish(fetch_quotes=not args.no_quotes)
     except LedgerError as exc:
         print(f"publish: {exc}")
         return 1

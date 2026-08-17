@@ -212,7 +212,7 @@ def test_cli_table_includes_last_s(tmp_path: Path):
         "QTY",
         "AVG",
         "COST",
-        "LAST",
+        "CMP",
         "RETURN",
         "S",
         "BAND",
