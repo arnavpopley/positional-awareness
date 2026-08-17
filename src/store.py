@@ -91,6 +91,17 @@ CREATE TABLE IF NOT EXISTS extractions (
     model TEXT,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS kpi_series (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker TEXT NOT NULL,
+    kpi_name TEXT NOT NULL,
+    period TEXT NOT NULL,
+    value REAL NOT NULL,
+    source_filing_id INTEGER,
+    created_at TEXT NOT NULL,
+    UNIQUE(ticker, kpi_name, period)
+);
 """
 
 
@@ -341,6 +352,58 @@ class Store:
             ),
         )
         self.conn.commit()
+
+    def insert_kpi_print(
+        self,
+        *,
+        ticker: str,
+        kpi_name: str,
+        period: str,
+        value: float,
+        source_filing_id: int | None,
+    ) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO kpi_series (
+                ticker, kpi_name, period, value, source_filing_id, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(ticker, kpi_name, period) DO UPDATE SET
+                value = excluded.value,
+                source_filing_id = excluded.source_filing_id
+            """,
+            (ticker, kpi_name, period, value, source_filing_id, _utcnow()),
+        )
+        self.conn.commit()
+
+    def kpi_qoq_history(self, symbol: str) -> list[float]:
+        names = [
+            row["kpi_name"]
+            for row in self.conn.execute(
+                "SELECT DISTINCT kpi_name FROM kpi_series WHERE ticker = ?",
+                (symbol,),
+            )
+        ]
+        best: list[float] = []
+        for name in names:
+            levels = [
+                float(row["value"])
+                for row in self.conn.execute(
+                    """
+                    SELECT value FROM kpi_series
+                    WHERE ticker = ? AND kpi_name = ?
+                    ORDER BY id
+                    """,
+                    (symbol, name),
+                )
+            ]
+            qoq: list[float] = []
+            for prev, cur in zip(levels, levels[1:]):
+                if prev == 0:
+                    continue
+                qoq.append((cur - prev) / abs(prev))
+            if len(qoq) > len(best):
+                best = qoq
+        return best
 
     def alert_sent(self, filing_id: int, channel: str) -> bool:
         row = self.conn.execute(

@@ -79,7 +79,7 @@ If no factors are active, S is **undefined** (`None`). Emit no band. If fewer th
 | −0.60 to −0.25 | negative |
 | ≤ −0.60 | strongly negative |
 
-Gemini **extracts numbers** from PDFs/text. The weighted sum is **deterministic**. Show the five lines (`raw → x → w·x`) in every rec. Persist `active_factors` next to S.
+Gemini **extracts numbers** from PDFs/text. The weighted sum is **deterministic** (`src/score.py` `score_extraction`). Show the five lines (`raw → x → w·x`) in every rec. Persist `active_factors` next to S. `needs_manual_read` suppresses the band.
 
 A **hit** for later evaluation: did the named KPI subsequently confirm the call? Not “did the stock beat Nifty.”
 

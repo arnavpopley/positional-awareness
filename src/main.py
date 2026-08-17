@@ -41,6 +41,7 @@ def _empty_stats() -> dict[str, int]:
         "extracted": 0,
         "extract_cached": 0,
         "needs_manual_read": 0,
+        "scored": 0,
     }
 
 
@@ -53,6 +54,7 @@ def ingest(
     now: datetime | None = None,
     tickers: list[Ticker] | None = None,
     extractor=None,
+    scorer=None,
 ) -> dict[str, int]:
     """Store every filing. Notify only fresh candidate/priority rows.
 
@@ -61,13 +63,16 @@ def ingest(
     Extraction runs only for fresh, non-collapsed candidate/priority rows.
     """
     from src.extract import extract_filing as default_extract
+    from src.score import persist, score_extraction
 
     now = now or datetime.now(tz=IST)
     stats = _empty_stats()
     inserted: list[tuple[Filing, str, int]] = []
     tickers_seen: set[str] = set()
     book = {t.symbol: t for t in (tickers or [])}
+    peer_list = list(tickers or [])
     do_extract = default_extract if extractor is None else extractor
+    do_score = score_extraction if scorer is None else scorer
     for filing in filings:
         status = classify(filing)
         row_id = store.insert_filing(filing, status)
@@ -99,17 +104,48 @@ def ingest(
         if not is_notify_fresh(filing, now):
             continue
         result = do_extract(filing, book.get(filing.ticker), store)
+        scored = None
+        manual = False
         if result is not None:
             stats["extracted"] += 1
             if getattr(result, "cached", False):
                 stats["extract_cached"] += 1
-            if getattr(result, "needs_manual_read", False):
+            manual = bool(getattr(result, "needs_manual_read", False))
+            if manual:
                 stats["needs_manual_read"] += 1
+            payload = getattr(result, "kpis_json", None)
+            scored = do_score(
+                payload,
+                ticker=book.get(filing.ticker),
+                peers=peer_list,
+                store=store,
+                needs_manual_read=manual,
+                filing_id=row_id,
+            )
+            if scored is not None:
+                persist(
+                    scored,
+                    store,
+                    filing_id=row_id,
+                    triage={"needs_manual_read": manual},
+                )
+                stats["scored"] += 1
+                print(f"{filing.ticker}: {scored.display()}")
         if not notify:
             continue
         if store.alert_sent(row_id, CHANNEL):
             continue
-        if notifier(filing, status=status):
+        notified = False
+        try:
+            notified = notifier(
+                filing,
+                status=status,
+                band=None if scored is None else scored.band,
+                needs_manual_read=manual,
+            )
+        except TypeError:
+            notified = notifier(filing, status=status)
+        if notified:
             store.record_alert(row_id, CHANNEL)
             stats["notified"] += 1
     return stats
@@ -153,7 +189,7 @@ def poll_tickers(
             f"+{stats['priority']} priority +{stats['low']} low "
             f"+{stats['kill']} kill dup={stats['dup']} "
             f"notified={stats['notified']} collapsed={stats['collapsed']} "
-            f"extracted={stats['extracted']}"
+            f"extracted={stats['extracted']} scored={stats['scored']}"
         )
     return totals
 
@@ -195,7 +231,7 @@ def run_slot(kind: str, *, notify_backfill: bool = False, fixture: Path | None =
             f"candidate={stats['candidate']} priority={stats['priority']} "
             f"kill={stats['kill']} low={stats['low']} "
             f"notified={stats['notified']} collapsed={stats['collapsed']} "
-            f"extracted={stats['extracted']}"
+            f"extracted={stats['extracted']} scored={stats['scored']}"
         )
     finally:
         store.close()

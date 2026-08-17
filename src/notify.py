@@ -14,9 +14,19 @@ def _as_literal(text: str) -> str:
     return json.dumps(text, ensure_ascii=False)
 
 
-def notify_candidate(filing: Filing, status: str = "candidate") -> bool:
+def notify_candidate(
+    filing: Filing,
+    status: str = "candidate",
+    *,
+    band: str | None = None,
+    needs_manual_read: bool = False,
+) -> bool:
     """macOS notification: headline + link. Candidate and priority filings."""
     title = f"{filing.ticker} · {status}"
+    if needs_manual_read:
+        title += " · needs_manual_read"
+    elif band:
+        title += f" · {band}"
     body = " ".join(filing.headline.split())
     if filing.pdf_url:
         body = f"{body} · {filing.pdf_url}"
