@@ -14,11 +14,12 @@ from src.web.publish import HOST, publish
 
 ENV_PATH = ROOT / ".env"
 PASSWORD_KEY = "PA_SITE_PASSWORD"
+PASSWORD_LEN = 16
 ALPHABET = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
 
 def new_password() -> str:
-    return "".join(secrets.choice(ALPHABET) for _ in range(8))
+    return "".join(secrets.choice(ALPHABET) for _ in range(PASSWORD_LEN))
 
 
 def upsert_env(key: str, value: str) -> None:
@@ -45,15 +46,20 @@ def load_password() -> str:
     return os.environ.get(PASSWORD_KEY) or ""
 
 
+def rotate_password() -> str:
+    """Replace PA_SITE_PASSWORD. Never prints other .env keys."""
+    password = new_password()
+    upsert_env(PASSWORD_KEY, password)
+    os.environ[PASSWORD_KEY] = password
+    return password
+
+
 def ensure_password() -> tuple[str, bool]:
     """Return (password, created). Never prints other .env keys."""
     existing = load_password()
     if existing:
         return existing, False
-    password = new_password()
-    upsert_env(PASSWORD_KEY, password)
-    os.environ[PASSWORD_KEY] = password
-    return password, True
+    return rotate_password(), True
 
 
 def stage_deploy(dest: Path, *, fetch_quotes: bool = True) -> Path:
@@ -80,10 +86,14 @@ def _logged_in() -> bool:
     return result.returncode == 0 and "Logged out" not in out
 
 
-def deploy(*, fetch_quotes: bool = True) -> int:
-    password, created = ensure_password()
-    if created:
-        print(f"stored {PASSWORD_KEY} in .env (gitignored)")
+def deploy(*, fetch_quotes: bool = True, new_password: bool = False) -> int:
+    if new_password:
+        password = rotate_password()
+        print(f"new {PASSWORD_KEY} (keep this): {password}")
+    else:
+        password, created = ensure_password()
+        if created:
+            print(f"new {PASSWORD_KEY} (keep this): {password}")
     with tempfile.TemporaryDirectory(prefix="pa-vercel-") as tmp:
         stage_deploy(Path(tmp), fetch_quotes=fetch_quotes)
         env = os.environ.copy()
@@ -115,8 +125,13 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="skip Groww CMP (offline)",
     )
+    parser.add_argument(
+        "--new-password",
+        action="store_true",
+        help="replace PA_SITE_PASSWORD (16 chars) and redeploy",
+    )
     args = parser.parse_args(argv)
-    return deploy(fetch_quotes=not args.no_quotes)
+    return deploy(fetch_quotes=not args.no_quotes, new_password=args.new_password)
 
 
 if __name__ == "__main__":

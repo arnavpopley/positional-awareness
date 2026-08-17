@@ -107,3 +107,12 @@ def test_publish_bakes_groww_cmp(tmp_path: Path, monkeypatch):
     assert "50.25" in name
     assert "+10.4%" in name
     assert "quotes.js" not in index
+
+
+def test_site_password_is_sixteen_chars():
+    from src.web.deploy import ALPHABET, PASSWORD_LEN, new_password
+
+    password = new_password()
+    assert len(password) == 16
+    assert PASSWORD_LEN == 16
+    assert set(password) <= set(ALPHABET)

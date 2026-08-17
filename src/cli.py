@@ -223,6 +223,12 @@ def main(argv: list[str] | None = None) -> int:
         dest="deploy_no_quotes",
         help="skip Groww CMP (offline)",
     )
+    dep.add_argument(
+        "--new-password",
+        action="store_true",
+        dest="deploy_new_password",
+        help="replace PA_SITE_PASSWORD (16 chars) and redeploy",
+    )
     args = parser.parse_args(argv)
     try:
         if args.command == "sync":
@@ -258,7 +264,12 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "deploy":
             from src.web.deploy import main as deploy_main
 
-            return deploy_main(["--no-quotes"] if args.deploy_no_quotes else [])
+            flags = []
+            if args.deploy_no_quotes:
+                flags.append("--no-quotes")
+            if args.deploy_new_password:
+                flags.append("--new-password")
+            return deploy_main(flags)
         print(render_table(fetch_quotes=not args.no_quotes))
         return 0
     except LedgerError as exc:
