@@ -1,5 +1,8 @@
 {
   "cleanUrls": true,
+  "git": {
+    "deploymentEnabled": false
+  },
   "rewrites": [
     { "source": "/api/login", "destination": "/api/login" },
     { "source": "/login", "destination": "/login.html" },

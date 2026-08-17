@@ -116,3 +116,27 @@ def test_site_password_is_sixteen_chars():
     assert len(password) == 16
     assert PASSWORD_LEN == 16
     assert set(password) <= set(ALPHABET)
+
+
+def test_deploy_refuses_new_url_when_logged_out(monkeypatch, capsys):
+    from src.web.deploy import deploy
+
+    monkeypatch.setattr("src.web.deploy._logged_in", lambda: False)
+
+    def boom(*args, **kwargs):
+        raise AssertionError("must not call vercel")
+
+    monkeypatch.setattr("src.web.deploy.subprocess.run", boom)
+    monkeypatch.setattr("src.web.deploy.stage_deploy", boom)
+    assert deploy(fetch_quotes=False) == 2
+    err = capsys.readouterr().out
+    assert "Will not create a new URL" in err
+    assert "--temporary" not in err
+
+
+def test_host_vercel_json_disables_git_autodeploy():
+    import json
+    from src.web.publish import HOST
+
+    cfg = json.loads((HOST / "vercel.json").read_text(encoding="utf-8"))
+    assert cfg["git"]["deploymentEnabled"] is False

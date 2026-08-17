@@ -14,6 +14,8 @@ from src.web.publish import HOST, publish
 
 ENV_PATH = ROOT / ".env"
 PASSWORD_KEY = "PA_SITE_PASSWORD"
+PROJECT_KEY = "PA_VERCEL_PROJECT"
+DEFAULT_PROJECT = "temporary-snappy-tuba-wtrnk56"
 PASSWORD_LEN = 16
 ALPHABET = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
@@ -75,6 +77,11 @@ def stage_deploy(dest: Path, *, fetch_quotes: bool = True) -> Path:
     return dest
 
 
+def project_name() -> str:
+    load_dotenv(ENV_PATH)
+    return os.environ.get(PROJECT_KEY) or DEFAULT_PROJECT
+
+
 def _logged_in() -> bool:
     result = subprocess.run(
         ["npx", "--yes", "vercel", "whoami"],
@@ -87,6 +94,19 @@ def _logged_in() -> bool:
 
 
 def deploy(*, fetch_quotes: bool = True, new_password: bool = False) -> int:
+    if not _logged_in():
+        name = project_name()
+        print(
+            "vercel: this Mac is logged out. Will not create a new URL.\n"
+            f"  1. npx vercel login\n"
+            f"  2. In Vercel, open project {name} "
+            "(https://temporary-snappy-tuba-wtrnk56.vercel.app)\n"
+            "     Settings → Git → connect arnavpopley/positional-awareness.\n"
+            "     Do not Import a new project from GitHub; that mints another URL.\n"
+            "  3. Git auto-deploy stays off (the book is not in git).\n"
+            "  4. uv run pos deploy"
+        )
+        return 2
     if new_password:
         password = rotate_password()
         print(f"new {PASSWORD_KEY} (keep this): {password}")
@@ -104,14 +124,12 @@ def deploy(*, fetch_quotes: bool = True, new_password: bool = False) -> int:
             "vercel",
             "deploy",
             "--yes",
+            "--prod",
+            "--project",
+            project_name(),
             "-e",
             f"{PASSWORD_KEY}={password}",
         ]
-        if _logged_in():
-            cmd.append("--prod")
-        else:
-            cmd.append("--temporary")
-            print("vercel: not logged in; creating a temporary deployment you can claim")
         result = subprocess.run(cmd, cwd=tmp, env=env)
         return int(result.returncode)
 
