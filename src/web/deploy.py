@@ -15,7 +15,7 @@ from src.web.publish import HOST, publish
 ENV_PATH = ROOT / ".env"
 PASSWORD_KEY = "PA_SITE_PASSWORD"
 PROJECT_KEY = "PA_VERCEL_PROJECT"
-DEFAULT_PROJECT = "temporary-snappy-tuba-wtrnk56"
+DEFAULT_PROJECT = "positional-awareness"
 PASSWORD_LEN = 16
 ALPHABET = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
