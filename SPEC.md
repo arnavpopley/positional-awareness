@@ -171,7 +171,8 @@ PDFs: download, `pdfplumber`. Near-empty text → `needs_manual_read`, still not
 ### 4. v1 surface
 
 - **CLI table:** name, return vs cost, last S, band, thesis, KPI series, next earnings date. `no_thesis` rows sit at the top. Thesis-less Groww holdings plus ledger `no_thesis` names count as outstanding (cache only, never the live API).
-- **Local page:** `pos web` — read-only FastAPI on `127.0.0.1`. Book table and one name’s thesis / conditions / S / filings / KPI history. Delayed quotes, not a live ticker. No auth, no orders. Optional `config/launchd-web.plist.example` keeps it up.
+- **Local page:** `pos web` — read-only FastAPI on `127.0.0.1`. Optional `config/launchd-web.plist.example` keeps it up.
+- **Hosted snapshot (optional):** `pos publish` writes a static copy; `pos deploy` pushes it to Vercel behind `PA_SITE_PASSWORD`. Not live. Not in git. No orders.
 - **`pos sync`:** read-only Groww holdings vs ledger. Report drift and `NO_THESIS` ledger rows; do not write the ledger.
 - **`pos context <TICKER>`:** local markdown dump (thesis, conditions with severity, currently touched conditions, filings, KPI history, decisions) for pasting into an external chat. No LLM call, no network. `--filings N` and `--since YYYY-MM-DD`.
 - **`pos decide SYMBOL ACTION [NOTE] [--anticipatory]`:** user stamp into `decisions`. `--anticipatory` marks a decision made ahead of a results print. `pos decisions --anticipatory` lists only those.

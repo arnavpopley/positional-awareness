@@ -8,13 +8,15 @@
 </head>
 <body>
   <header class="mast">
-    <p class="eyebrow">localhost · read only · never places a trade</p>
+    <p class="eyebrow">{% if hosted %}hosted snapshot · password · never places a trade{% else %}localhost · read only · never places a trade{% endif %}</p>
     <h1><a href="/">Positional Awareness</a></h1>
     <p class="lede">Thesis and named KPIs on the row. You click Groww.</p>
   </header>
   <main>
     {% block body %}{% endblock %}
   </main>
+  {% if pulse %}
   <script src="/static/pulse.js"></script>
+  {% endif %}
 </body>
 </html>

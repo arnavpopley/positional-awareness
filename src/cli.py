@@ -209,6 +209,18 @@ def main(argv: list[str] | None = None) -> int:
         dest="web_no_quotes",
         help="skip delayed quotes",
     )
+    pub = sub.add_parser("publish", help="write a static snapshot (gitignored site/)")
+    pub.add_argument(
+        "--quotes",
+        action="store_true",
+        help="bake delayed quotes into the snapshot",
+    )
+    dep = sub.add_parser("deploy", help="publish a password-gated snapshot to Vercel")
+    dep.add_argument(
+        "--quotes",
+        action="store_true",
+        help="bake delayed quotes into the snapshot",
+    )
     args = parser.parse_args(argv)
     try:
         if args.command == "sync":
@@ -237,6 +249,14 @@ def main(argv: list[str] | None = None) -> int:
             if args.web_no_quotes:
                 flags.append("--no-quotes")
             return web_main(flags)
+        if args.command == "publish":
+            from src.web.publish import main as publish_main
+
+            return publish_main(["--quotes"] if args.quotes else [])
+        if args.command == "deploy":
+            from src.web.deploy import main as deploy_main
+
+            return deploy_main(["--quotes"] if args.quotes else [])
         print(render_table(fetch_quotes=not args.no_quotes))
         return 0
     except LedgerError as exc:

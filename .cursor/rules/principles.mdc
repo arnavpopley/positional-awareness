@@ -12,7 +12,7 @@ Read `SPEC.md` before writing code. The ledger (`config/tickers.yaml`) is the pr
 1. Silence is a feature. When in doubt, do not ping. A missed low-priority filing is fine; a noisy feed is failure.
 2. Never place a trade. Output is event + named KPI + S arithmetic + add/hold/trim. User clicks Groww.
 3. Capture-and-triage, not streaming. Poll on the SPEC cadence. No websockets.
-4. Boring stack: Python, SQLite, CLI, macOS notify, local read-only page. No extra product surfaces.
+4. Boring stack: Python, SQLite, CLI, macOS notify, local read-only page. Optional password-gated Vercel snapshot (`pos deploy`); data stays off git.
 5. Beta weights are frozen. Do not tune S in v1.
 6. No Nifty-relative alpha. Price is the name’s own move.
 7. Telegram is later, not v1. v1 surface is CLI + macOS notifications + localhost page.
@@ -20,9 +20,9 @@ Read `SPEC.md` before writing code. The ledger (`config/tickers.yaml`) is the pr
 
 ## Do not build (ever in Phase 0/1)
 
-Auth, Telegram, broker order APIs, live prices, scanners, Twitter/sentiment, RSI/MACD, Ollama, predicted beats, weight optimizer, NSE unless NSE-only, eCAS, public deploy.
+Telegram, broker order APIs, live prices, scanners, Twitter/sentiment, RSI/MACD, Ollama, predicted beats, weight optimizer, NSE unless NSE-only, eCAS, unauthenticated public book.
 
-A **read-only localhost page** is Phase 2 and is in tree. It is not a multi-user site and never places a trade.
+A **read-only localhost page** is in tree. A **password-gated Vercel snapshot** is a published copy of that page, not a second poller. Never commit `site/`, `tickers.yaml`, sqlite, or `PA_SITE_PASSWORD`. Never places a trade.
 
 If asked for a fix and an exploit/PoC against an exchange: fix/client only.
 

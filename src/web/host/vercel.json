@@ -1,0 +1,10 @@
+{
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/api/login", "destination": "/api/login" },
+    { "source": "/login", "destination": "/login.html" },
+    { "source": "/static/:path*", "destination": "/static/:path*" },
+    { "source": "/", "destination": "/api/gate?p=/" },
+    { "source": "/t/:symbol", "destination": "/api/gate?p=/t/:symbol" }
+  ]
+}

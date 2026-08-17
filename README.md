@@ -30,6 +30,8 @@ uv sync --group dev
 | `uv run pos sync` | Read-only Groww holdings vs ledger. Uses API key + secret from `.env` (exchanges for a daily access token). Reports missing thesis / ledger `NO_THESIS` / not-held / qty-cost drift. Never writes the ledger. |
 | `uv run pos context SYMBOL [--filings N] [--since YYYY-MM-DD]` | Local markdown for one name. No network, no LLM. |
 | `uv run pos web` | Read-only local page at http://127.0.0.1:8787. Reloads when the poller writes new filings or you edit the ledger. Not a public site. |
+| `uv run pos publish` | Write a static snapshot to `site/` (gitignored). |
+| `uv run pos deploy` | Publish that snapshot to Vercel behind `PA_SITE_PASSWORD`. Snapshot, not live. |
 | `uv run pos decide SYMBOL ACTION [NOTE] [--anticipatory]` | Stamp a user decision. `--anticipatory` = ahead of a results print. |
 | `uv run pos decisions [--anticipatory]` | List stamped decisions. |
 | `uv run python -m src.main --once` | One poll of BSE for ledger names. First run stores silently; later runs notify **candidate** filings |

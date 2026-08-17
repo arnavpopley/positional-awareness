@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Positional Awareness</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="mast">
+    <p class="eyebrow">hosted snapshot · password · never places a trade</p>
+    <h1>Positional Awareness</h1>
+    <p class="lede">Read-only book. You click Groww.</p>
+  </header>
+  <main>
+    <form class="gate" method="post" action="/api/login">
+      <label for="password">password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" autofocus>
+      <p class="notice" id="bad" hidden>wrong password</p>
+      <button type="submit">open</button>
+    </form>
+  </main>
+  <script>
+    if (new URLSearchParams(window.location.search).get("bad")) {
+      document.getElementById("bad").hidden = false;
+    }
+  </script>
+</body>
+</html>

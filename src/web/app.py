@@ -13,36 +13,11 @@ from src.ledger import LedgerError, Ticker, by_symbol, load_tickers
 from src.paths import TICKERS_PATH
 from src.quotes import last_price, pct_return
 from src.store import Store
-from src.view import book_rows, fmt_price, fmt_qty, fmt_ret, fmt_s
+from src.view import fmt_price, fmt_ret
+from src.web.render import index_context, name_context
 
 HERE = Path(__file__).resolve().parent
 TEMPLATES = Jinja2Templates(directory=str(HERE / "templates"))
-FACTORS = ("kpi", "book", "industry", "price", "guidance")
-
-
-def _group_prints(rows) -> list[tuple[str, list]]:
-    order: list[str] = []
-    buckets: dict[str, list] = {}
-    for row in rows:
-        name = str(row["kpi_name"])
-        if name not in buckets:
-            order.append(name)
-            buckets[name] = []
-        buckets[name].append(row)
-    return [(name, buckets[name]) for name in order]
-
-
-def _factor_lines(score_row) -> list[tuple[str, str]]:
-    if score_row is None:
-        return [(name, "n/a") for name in FACTORS]
-    lines: list[tuple[str, str]] = []
-    for name in FACTORS:
-        raw = score_row[f"x_{name}"]
-        if raw is None:
-            lines.append((name, "n/a"))
-        else:
-            lines.append((name, f"{float(raw):+.2f}"))
-    return lines
 
 
 def create_app(
@@ -65,16 +40,19 @@ def create_app(
     def index(request: Request) -> HTMLResponse:
         store = _store()
         try:
-            missing, rows = book_rows(_book(), store, fetch_quotes=False)
+            ctx = index_context(
+                _book(),
+                store,
+                fetch_quotes=False,
+                hosted=False,
+                pulse=True,
+                defer_quotes=defer_quotes,
+            )
         except LedgerError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
         finally:
             store.close()
-        return TEMPLATES.TemplateResponse(
-            request,
-            "index.html",
-            {"missing": missing, "rows": rows, "defer_quotes": defer_quotes},
-        )
+        return TEMPLATES.TemplateResponse(request, "index.html", ctx)
 
     @app.get("/api/quotes")
     def api_quotes() -> dict[str, dict]:
@@ -113,30 +91,7 @@ def create_app(
         store = _store()
         try:
             ticker = by_symbol(_book(), symbol)
-            score_row = store.latest_score(ticker.symbol)
-            s_val = None if score_row is None or score_row["S"] is None else float(score_row["S"])
-            band = "" if score_row is None or not score_row["band"] else str(score_row["band"])
-            ctx = {
-                "ticker": ticker,
-                "qty": fmt_qty(ticker.qty),
-                "avg_cost": fmt_price(ticker.avg_cost),
-                "S": fmt_s(s_val),
-                "band": band,
-                "low_confidence": bool(score_row["low_confidence"]) if score_row else False,
-                "factors": _factor_lines(score_row),
-                "next_event": store.next_event(ticker.symbol)
-                or (
-                    f"Results due {ticker.results_due.isoformat()}"
-                    if ticker.results_due
-                    else None
-                ),
-                "quantitative": [c for c in ticker.conditions if c.check == "quantitative"],
-                "manual": [c for c in ticker.conditions if c.check == "manual"],
-                "touched": store.current_touches(ticker.symbol),
-                "filings": store.filings_for(ticker.symbol, limit=20),
-                "prints": _group_prints(store.kpi_prints_for(ticker.symbol)),
-                "decisions": store.decisions_for(ticker.symbol),
-            }
+            ctx = name_context(ticker, store, hosted=False, pulse=True)
         except LedgerError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         finally:

@@ -166,6 +166,39 @@ h4 { font-size: 1rem; margin: 1rem 0 0.4rem; }
 }
 .print { margin: 0.15rem 0; font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 0.9rem; }
 
+.gate { max-width: 18rem; }
+.gate label {
+  display: block;
+  font-family: ui-sans-serif, "Helvetica Neue", sans-serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.4rem;
+}
+.gate input {
+  width: 100%;
+  box-sizing: border-box;
+  background: #000000;
+  color: #00ff00;
+  border: 1px solid #00aa00;
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 1rem;
+  padding: 0.5rem 0.6rem;
+}
+.gate button {
+  margin-top: 0.75rem;
+  background: #000000;
+  color: #00ff00;
+  border: 1px solid #00ff00;
+  font-family: ui-sans-serif, "Helvetica Neue", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  padding: 0.45rem 0.8rem;
+  cursor: pointer;
+}
+
 @media (max-width: 800px) {
   .book th:nth-child(n+4), .book td:nth-child(n+4) { display: none; }
   .book th:nth-child(6), .book td:nth-child(6),
