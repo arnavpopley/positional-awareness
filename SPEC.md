@@ -170,11 +170,12 @@ PDFs: download, `pdfplumber`. Near-empty text → `needs_manual_read`, still not
 
 ### 4. v1 surface
 
-- **CLI table:** name, return vs cost, thesis, KPI series, last S, band, next earnings date. `no_thesis` rows sit at the top. Thesis-less Groww holdings plus ledger `no_thesis` names count as outstanding (cache only, never the live API).
+- **CLI table:** name, return vs cost, last S, band, thesis, KPI series, next earnings date. `no_thesis` rows sit at the top. Thesis-less Groww holdings plus ledger `no_thesis` names count as outstanding (cache only, never the live API).
 - **`pos sync`:** read-only Groww holdings vs ledger. Report drift and `NO_THESIS` ledger rows; do not write the ledger.
 - **`pos context <TICKER>`:** local markdown dump (thesis, conditions with severity, currently touched conditions, filings, KPI history, decisions) for pasting into an external chat. No LLM call, no network. `--filings N` and `--since YYYY-MM-DD`.
 - **`pos decide SYMBOL ACTION [NOTE] [--anticipatory]`:** user stamp into `decisions`. `--anticipatory` marks a decision made ahead of a results print. `pos decisions --anticipatory` lists only those.
-- **macOS notification** on: earnings pack, band change, needs_manual_read.
+- **`pos pack [SYMBOL] [--notify]`:** earnings pack (thesis, KPI to watch, last 3–4 prints, current S, confidence). No predicted beat. `--notify` sends the short macOS form. Without a symbol, only names with results due in the next few days.
+- **macOS notification** on: earnings pack (once per due date), weekly nudge for `event`/`manual` names (once per ISO week), band change, needs_manual_read.
 - **Telegram: later**, not v1.
 
 ---
@@ -198,6 +199,8 @@ PDFs: download, `pdfplumber`. Near-empty text → `needs_manual_read`, still not
 - `kpi_series`: ticker, kpi_name, period, value, source_filing_id
 - `extractions`: filing_hash, filing_id, text, needs_manual_read, kpis_json, model, created_at. Cached by filing hash so Gemini is never re-called on a re-run.
 - `alerts`: event_id, channel (macos|telegram), sent_at
+- `ticker_state`: symbol, results_due, last_fetch_at, results_filed_for, pack_sent_for (ISO date of the results window already packed)
+- `meta`: key/value; `nudge_week` is the ISO week already nudged
 - `holdings_cache`: symbol, isin, qty, avg_cost, fetched_at (Groww snapshot; CLI reads this, never the API)
 - `decisions`: ticker, date, action, note, S_at_time, **anticipatory** (user stamp / follow-or-nudge; anticipatory = ahead of a results print)
 - `condition_touches`: ticker, condition_text, severity, check_kind, filing_id, touched_at. Rolling 2-quarter window for escalation.

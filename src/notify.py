@@ -14,22 +14,9 @@ def _as_literal(text: str) -> str:
     return json.dumps(text, ensure_ascii=False)
 
 
-def notify_candidate(
-    filing: Filing,
-    status: str = "candidate",
-    *,
-    band: str | None = None,
-    needs_manual_read: bool = False,
-) -> bool:
-    """macOS notification: headline + link. Candidate and priority filings."""
-    title = f"{filing.ticker} · {status}"
-    if needs_manual_read:
-        title += " · needs_manual_read"
-    elif band:
-        title += f" · {band}"
-    body = " ".join(filing.headline.split())
-    if filing.pdf_url:
-        body = f"{body} · {filing.pdf_url}"
+def notify_message(title: str, body: str) -> bool:
+    """macOS notification. Returns False if osascript is unavailable."""
+    body = " ".join(body.split())
     if len(body) > 220:
         body = body[:219] + "…"
     if sys.platform != "darwin" or which("osascript") is None:
@@ -46,6 +33,25 @@ def notify_candidate(
         text=True,
     )
     return result.returncode == 0
+
+
+def notify_candidate(
+    filing: Filing,
+    status: str = "candidate",
+    *,
+    band: str | None = None,
+    needs_manual_read: bool = False,
+) -> bool:
+    """macOS notification: headline + link. Candidate and priority filings."""
+    title = f"{filing.ticker} · {status}"
+    if needs_manual_read:
+        title += " · needs_manual_read"
+    elif band:
+        title += f" · {band}"
+    body = " ".join(filing.headline.split())
+    if filing.pdf_url:
+        body = f"{body} · {filing.pdf_url}"
+    return notify_message(title, body)
 
 
 def main(argv: list[str] | None = None) -> int:

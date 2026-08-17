@@ -19,6 +19,7 @@ from src.filter import (
 )
 from src.ledger import LedgerError, Ticker, load_tickers
 from src.notify import CHANNEL, notify_candidate
+from src.pack import deliver_packs, deliver_weekly_nudge
 from src.schedule import IST, MIN_INTERVAL, tickers_for_slot
 from src.sources.base import Filing
 from src.sources.bse import BSESource, load_fixture
@@ -222,26 +223,36 @@ def poll_fixture(
     return totals
 
 
-def run_slot(kind: str, *, notify_backfill: bool = False, fixture: Path | None = None) -> None:
+def run_slot(
+    kind: str,
+    *,
+    notify_backfill: bool = False,
+    fixture: Path | None = None,
+    now: datetime | None = None,
+) -> None:
     tickers = load_tickers()
     store = Store()
     try:
-        due = tickers_for_slot(tickers, store, kind=kind)
-        if not due:
-            return
+        ist = now or datetime.now(tz=IST)
+        due = tickers_for_slot(tickers, store, kind=kind, now=ist)
         first = store.filing_count() == 0
         notify = notify_backfill or not first
-        if fixture:
-            stats = poll_fixture(fixture, due, store, notify=notify)
-        else:
-            stats = poll_tickers(due, store, BSESource(), notify=notify)
-        print(
-            f"slot={kind} names={len(due)} "
-            f"candidate={stats['candidate']} priority={stats['priority']} "
-            f"kill={stats['kill']} low={stats['low']} "
-            f"notified={stats['notified']} collapsed={stats['collapsed']} "
-            f"extracted={stats['extracted']} scored={stats['scored']}"
-        )
+        if due:
+            if fixture:
+                stats = poll_fixture(fixture, due, store, notify=notify)
+            else:
+                stats = poll_tickers(due, store, BSESource(), notify=notify)
+            print(
+                f"slot={kind} names={len(due)} "
+                f"candidate={stats['candidate']} priority={stats['priority']} "
+                f"kill={stats['kill']} low={stats['low']} "
+                f"notified={stats['notified']} collapsed={stats['collapsed']} "
+                f"extracted={stats['extracted']} scored={stats['scored']}"
+            )
+        packs = deliver_packs(tickers, store, notify=True, now=ist)
+        nudged = deliver_weekly_nudge(tickers, store, notify=True, now=ist)
+        if packs or nudged:
+            print(f"slot={kind} packs={packs} weekly_nudge={int(nudged)}")
     finally:
         store.close()
 

@@ -6,6 +6,7 @@ from datetime import date
 
 from src.context import context_command
 from src.ledger import LedgerError, Ticker, by_symbol, load_tickers
+from src.pack import pack_command
 from src.portfolio.base import Holding
 from src.portfolio.reconcile import reconcile, thesis_less_holdings
 from src.quotes import last_price, pct_return
@@ -31,6 +32,12 @@ def _fmt_ret(value: float | None) -> str:
     return f"{sign}{value:.1f}%"
 
 
+def _fmt_s(value: float | None) -> str:
+    if value is None:
+        return "—"
+    return f"{value:+.2f}"
+
+
 def _table_order(tickers: list[Ticker]) -> list[Ticker]:
     outstanding = [t for t in tickers if t.status == "no_thesis"]
     rest = [t for t in tickers if t.status != "no_thesis"]
@@ -52,9 +59,12 @@ def render_table(
             1 for t in tickers if t.status == "no_thesis"
         )
         rows: list[tuple[str, ...]] = []
-        headers = ("SYMBOL", "QTY", "AVG COST", "LAST", "RETURN", "THESIS", "NEXT")
+        headers = ("SYMBOL", "QTY", "AVG COST", "LAST", "RETURN", "S", "BAND", "THESIS", "NEXT")
         for ticker in _table_order(tickers):
             last = last_price(ticker) if fetch_quotes else None
+            score_row = store.latest_score(ticker.symbol)
+            s_val = None if score_row is None or score_row["S"] is None else float(score_row["S"])
+            band = "—" if score_row is None or not score_row["band"] else str(score_row["band"])
             nxt = store.next_event(ticker.symbol) or (
                 f"Results due {ticker.results_due.isoformat()}" if ticker.results_due else "—"
             )
@@ -65,6 +75,8 @@ def render_table(
                     _fmt_price(ticker.avg_cost),
                     _fmt_price(last),
                     _fmt_ret(pct_return(last, ticker.avg_cost)),
+                    _fmt_s(s_val),
+                    band,
                     ticker.thesis_short(),
                     nxt,
                 )
@@ -184,7 +196,7 @@ def list_decisions_command(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="pos",
-        description="Holdings table: return vs cost, thesis, next event",
+        description="Holdings table: return vs cost, last S, thesis, next event",
     )
     parser.add_argument(
         "--no-quotes",
@@ -221,6 +233,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="only decisions made ahead of a results print",
     )
+    pack = sub.add_parser(
+        "pack",
+        help="print the earnings pack for names with results due soon",
+    )
+    pack.add_argument("symbol", nargs="?")
+    pack.add_argument(
+        "--notify",
+        action="store_true",
+        help="also send a macOS notification for eligible packs",
+    )
     args = parser.parse_args(argv)
     try:
         if args.command == "sync":
@@ -240,6 +262,8 @@ def main(argv: list[str] | None = None) -> int:
             )
         if args.command == "decisions":
             return list_decisions_command(anticipatory=args.anticipatory)
+        if args.command == "pack":
+            return pack_command(args.symbol, notify=args.notify)
         print(render_table(fetch_quotes=not args.no_quotes))
         return 0
     except LedgerError as exc:

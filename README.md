@@ -25,15 +25,16 @@ uv sync --group dev
 
 | Command | What |
 |---|---|
-| `uv run pos` | Holdings table (delayed last price, return vs cost, thesis, next event). `no_thesis` rows first. Prints thesis-less holdings count from cache. |
+| `uv run pos` | Holdings table (delayed last price, return vs cost, last S, band, thesis, next event). `no_thesis` rows first. Prints thesis-less holdings count from cache. |
 | `uv run pos --no-quotes` | Same table, skip the quote fetch |
 | `uv run pos sync` | Read-only Groww holdings vs ledger. Uses API key + secret from `.env` (exchanges for a daily access token). Reports missing thesis / ledger `NO_THESIS` / not-held / qty-cost drift. Never writes the ledger. |
 | `uv run pos context SYMBOL [--filings N] [--since YYYY-MM-DD]` | Local markdown for one name. No network, no LLM. |
+| `uv run pos pack [SYMBOL] [--notify]` | Earnings pack: thesis, KPI to watch, last prints, S, confidence. No predicted beat. |
 | `uv run pos decide SYMBOL ACTION [NOTE] [--anticipatory]` | Stamp a user decision. `--anticipatory` = ahead of a results print. |
 | `uv run pos decisions [--anticipatory]` | List stamped decisions. |
 | `uv run python -m src.main --once` | One poll of BSE for ledger names. First run stores silently; later runs notify **candidate** filings |
 | `uv run python -m src.main --once --fixture tests/fixtures/anngetdata.json --notify-backfill` | Replay the saved BSE JSON (board meeting / results notify; trading-window does not) |
-| `uv run python -m src.main` | Scheduler: 09:30 / 12:30 / 16:00 / 19:00 IST weekdays, 08:00 IST daily, 15-minute floor for results-week / results-morning |
+| `uv run python -m src.main` | Scheduler: 09:30 / 12:30 / 16:00 / 19:00 IST weekdays, 08:00 IST daily, 15-minute floor for results-week / results-morning. Packs and the weekly event/manual nudge run on every slot. |
 | `uv run python -m src.sources.bse SUZLON` | Fetch announcements for one name |
 | `uv run python -m src.filter` | Classify the fixture |
 | `uv run python -m src.notify` | Test a macOS notification |

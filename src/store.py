@@ -49,7 +49,8 @@ CREATE TABLE IF NOT EXISTS ticker_state (
     symbol TEXT PRIMARY KEY,
     results_due TEXT,
     last_fetch_at TEXT,
-    results_filed_for TEXT
+    results_filed_for TEXT,
+    pack_sent_for TEXT
 );
 
 CREATE TABLE IF NOT EXISTS meta (
@@ -162,6 +163,9 @@ class Store:
             self.conn.execute(
                 "ALTER TABLE decisions ADD COLUMN anticipatory INTEGER NOT NULL DEFAULT 0"
             )
+        state_cols = {row[1] for row in self.conn.execute("PRAGMA table_info(ticker_state)")}
+        if "pack_sent_for" not in state_cols:
+            self.conn.execute("ALTER TABLE ticker_state ADD COLUMN pack_sent_for TEXT")
         self.conn.commit()
 
     def close(self) -> None:
@@ -463,10 +467,10 @@ class Store:
             ).fetchall()
         )
 
-    def latest_S(self, symbol: str) -> float | None:
-        row = self.conn.execute(
+    def latest_score(self, symbol: str) -> sqlite3.Row | None:
+        return self.conn.execute(
             """
-            SELECT s.S
+            SELECT s.S, s.band, s.low_confidence
             FROM scores s
             JOIN filings f ON f.id = s.filing_id
             WHERE f.ticker = ?
@@ -475,6 +479,9 @@ class Store:
             """,
             (symbol,),
         ).fetchone()
+
+    def latest_S(self, symbol: str) -> float | None:
+        row = self.latest_score(symbol)
         if row is None or row["S"] is None:
             return None
         return float(row["S"])
@@ -581,6 +588,33 @@ class Store:
         for row in rows:
             latest[str(row["condition_text"])] = row
         return list(latest.values())
+
+    def get_meta(self, key: str) -> str | None:
+        row = self.conn.execute(
+            "SELECT value FROM meta WHERE key = ?", (key,)
+        ).fetchone()
+        if row is None:
+            return None
+        return str(row["value"])
+
+    def set_meta(self, key: str, value: str) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO meta (key, value) VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            """,
+            (key, value),
+        )
+        self.conn.commit()
+
+    def pack_sent_for(self, symbol: str) -> date | None:
+        row = self._state(symbol)
+        if not row or not row["pack_sent_for"]:
+            return None
+        return date.fromisoformat(row["pack_sent_for"])
+
+    def mark_pack_sent(self, symbol: str, due: date) -> None:
+        self._upsert_state(symbol, pack_sent_for=due.isoformat())
 
     def alert_sent(self, filing_id: int, channel: str) -> bool:
         row = self.conn.execute(
