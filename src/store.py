@@ -175,6 +175,10 @@ class Store:
         row = self.conn.execute("SELECT COUNT(*) AS n FROM filings").fetchone()
         return int(row["n"])
 
+    def score_count(self) -> int:
+        row = self.conn.execute("SELECT COUNT(*) AS n FROM scores").fetchone()
+        return int(row["n"])
+
     def exists(self, filing: Filing) -> bool:
         if filing.ann_id:
             row = self.conn.execute(

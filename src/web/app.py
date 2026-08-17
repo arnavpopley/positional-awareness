@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from src.ledger import LedgerError, Ticker, by_symbol, load_tickers
+from src.paths import TICKERS_PATH
 from src.quotes import last_price, pct_return
 from src.store import Store
 from src.view import book_rows, fmt_price, fmt_qty, fmt_ret, fmt_s
@@ -91,6 +92,21 @@ def create_app(
                 "down": ret is not None and ret < 0,
             }
         return out
+
+    @app.get("/api/pulse")
+    def api_pulse() -> dict[str, int]:
+        store = _store()
+        try:
+            yaml_mtime = 0
+            if TICKERS_PATH.exists():
+                yaml_mtime = TICKERS_PATH.stat().st_mtime_ns
+            return {
+                "filings": store.filing_count(),
+                "scores": store.score_count(),
+                "yaml": yaml_mtime,
+            }
+        finally:
+            store.close()
 
     @app.get("/t/{symbol}", response_class=HTMLResponse)
     def name_page(request: Request, symbol: str) -> HTMLResponse:

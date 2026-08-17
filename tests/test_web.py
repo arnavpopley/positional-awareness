@@ -90,5 +90,14 @@ def test_unknown_name_is_404(tmp_path: Path):
     assert client.get("/t/NOSUCH").status_code == 404
 
 
+def test_pulse_tracks_filings(tmp_path: Path):
+    client = _client(tmp_path)
+    first = client.get("/api/pulse")
+    assert first.status_code == 200
+    assert first.json()["filings"] == 1
+    body = client.get("/").text
+    assert "/static/pulse.js" in body
+
+
 def test_web_refuses_non_localhost():
     assert main(["--host", "0.0.0.0"]) == 2
