@@ -7,12 +7,13 @@ from pathlib import Path
 
 import yaml
 
-from src.paths import SHARED_CONDITIONS_PATH, TICKERS_EXAMPLE_PATH, TICKERS_PATH
+from src.paths import TICKERS_EXAMPLE_PATH, TICKERS_PATH
 
 VALID_STATUS = {"held", "exiting", "event", "no_thesis", "manual"}
 POLL_STATUSES = {"held", "exiting"}
 SCORE_STATUSES = {"held"}
 CHECK_TYPES = {"quantitative", "manual"}
+SEVERITIES = {"structural", "material", "watch"}
 
 
 class LedgerError(ValueError):
@@ -23,6 +24,7 @@ class LedgerError(ValueError):
 class Condition:
     text: str
     check: str
+    severity: str
     kpi: str | None = None
     threshold: str | None = None
     source: str | None = None
@@ -61,7 +63,7 @@ class Ticker:
         return line[: width - 1] + "…"
 
     def polls(self) -> bool:
-        return self.status in POLL_STATUSES
+        return self.status in POLL_STATUSES and bool(self.bse_code)
 
     def scores(self) -> bool:
         return self.status in SCORE_STATUSES
@@ -104,49 +106,67 @@ def names_match(left: str, right: str) -> bool:
     return _fold_name(left) == _fold_name(right)
 
 
-def load_shared_conditions(path: Path | None = None) -> dict[str, list]:
-    target = path or SHARED_CONDITIONS_PATH
-    if not target.exists():
+def _as_shared(raw: object, source: str) -> dict[str, list]:
+    if not raw:
         return {}
-    raw = yaml.safe_load(target.read_text(encoding="utf-8")) or {}
     if not isinstance(raw, dict):
-        raise LedgerError(f"{target}: expected a mapping of named condition blocks")
+        raise LedgerError(f"{source}: shared_conditions must be a mapping")
     blocks: dict[str, list] = {}
     for key, items in raw.items():
         name = str(key).strip()
         if not name:
             continue
         if not isinstance(items, list):
-            raise LedgerError(f"{target}: {name} must be a list")
+            raise LedgerError(f"{source}: {name} must be a list")
         blocks[name] = items
     return blocks
 
 
+def split_ledger_document(raw: object, source: str) -> tuple[dict[str, list], list]:
+    if isinstance(raw, dict):
+        rows = raw.get("tickers")
+        if not isinstance(rows, list) or not rows:
+            raise LedgerError(f"{source}: expected a non-empty tickers list")
+        return _as_shared(raw.get("shared_conditions"), source), rows
+    if isinstance(raw, list) and raw:
+        return {}, raw
+    raise LedgerError(f"{source}: expected tickers: list or a mapping with tickers")
+
+
 def parse_condition(item: object, symbol: str, *, source: str | None = None) -> Condition:
     if isinstance(item, str):
-        text = " ".join(item.split())
-        if not text:
-            raise LedgerError(f"{symbol}: empty condition")
-        return Condition(text=text, check="manual", source=source)
+        raise LedgerError(
+            f"{symbol}: condition needs severity structural, material, or watch"
+        )
     if not isinstance(item, dict):
-        raise LedgerError(f"{symbol}: condition must be text or a mapping")
+        raise LedgerError(f"{symbol}: condition must be a mapping")
     check = str(item.get("check") or "").strip().lower()
     text = " ".join(str(item.get("text") or item.get("label") or "").split())
     kpi = str(item.get("kpi") or "").strip() or None
     threshold = str(item.get("threshold") or "").strip() or None
+    severity = str(item.get("severity") or "").strip().lower()
     if not check and item.get("name"):
         kpi = str(item["name"]).strip()
         if not text:
             text = str(item.get("label") or kpi).strip()
+        if severity not in SEVERITIES:
+            raise LedgerError(
+                f"{symbol}: condition needs severity structural, material, or watch"
+            )
         return Condition(
             text=text,
             check="quantitative",
+            severity=severity,
             kpi=kpi,
             threshold=str(item.get("check") or item.get("threshold") or "").strip() or None,
             source=source,
         )
     if check not in CHECK_TYPES:
         raise LedgerError(f"{symbol}: condition check must be quantitative or manual")
+    if severity not in SEVERITIES:
+        raise LedgerError(
+            f"{symbol}: condition needs severity structural, material, or watch"
+        )
     if check == "quantitative":
         if not kpi:
             kpi = str(item.get("name") or "").strip() or None
@@ -157,13 +177,21 @@ def parse_condition(item: object, symbol: str, *, source: str | None = None) -> 
         return Condition(
             text=text,
             check="quantitative",
+            severity=severity,
             kpi=kpi,
             threshold=threshold,
             source=source,
         )
     if not text:
         raise LedgerError(f"{symbol}: manual condition needs text")
-    return Condition(text=text, check="manual", kpi=kpi, threshold=threshold, source=source)
+    return Condition(
+        text=text,
+        check="manual",
+        severity=severity,
+        kpi=kpi,
+        threshold=threshold,
+        source=source,
+    )
 
 
 def _kpis_from_conditions(conditions: tuple[Condition, ...]) -> tuple[Kpi, ...]:
@@ -247,8 +275,6 @@ def parse_ticker(
         if not conditions:
             raise LedgerError(f"{symbol}: no condition — will not watch")
     bse_code = str(row.get("bse_code") or "").strip()
-    if status in {"held", "exiting"} and not bse_code:
-        raise LedgerError(f"{symbol}: missing bse_code")
     nse = row.get("nse_symbol")
     try:
         qty = float(row.get("qty") or 0)
@@ -277,11 +303,7 @@ def parse_ticker(
     )
 
 
-def load_tickers(
-    path: Path | None = None,
-    *,
-    shared_path: Path | None = None,
-) -> list[Ticker]:
+def load_tickers(path: Path | None = None) -> list[Ticker]:
     target = path or TICKERS_PATH
     if not target.exists():
         raise LedgerError(
@@ -289,10 +311,8 @@ def load_tickers(
             "and fill real theses + conditions."
         )
     raw = yaml.safe_load(target.read_text(encoding="utf-8"))
-    if not isinstance(raw, list) or not raw:
-        raise LedgerError(f"{target}: expected a non-empty list of names")
-    shared = load_shared_conditions(shared_path)
-    tickers = [parse_ticker(row, shared=shared) for row in raw]
+    shared, rows = split_ledger_document(raw, str(target))
+    tickers = [parse_ticker(row, shared=shared) for row in rows]
     seen: set[str] = set()
     for t in tickers:
         if t.symbol in seen:
@@ -304,7 +324,7 @@ def load_tickers(
 def by_symbol(tickers: list[Ticker], symbol: str) -> Ticker:
     key = symbol.strip().upper()
     for t in tickers:
-        if t.symbol == key or t.bse_code == symbol.strip():
+        if t.symbol == key or (t.bse_code and t.bse_code == symbol.strip()):
             return t
     raise LedgerError(f"{symbol} is not in the ledger")
 

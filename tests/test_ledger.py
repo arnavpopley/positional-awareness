@@ -15,20 +15,23 @@ def test_example_ledger_loads():
     assert any(c.check == "quantitative" for c in tickers[0].conditions)
     assert "CFO departs" in names
     assert "Moat erodes, story stops making sense" in names
+    assert {c.severity for c in tickers[0].conditions} <= {"structural", "material", "watch"}
 
 
 def test_refuse_no_thesis(tmp_path: Path):
     path = tmp_path / "tickers.yaml"
     path.write_text(
         yaml.dump(
-            [
-                {
-                    "symbol": "FOO",
-                    "bse_code": "1",
-                    "thesis": "   ",
-                    "kpis": [{"name": "rev"}],
-                }
-            ]
+            {
+                "tickers": [
+                    {
+                        "symbol": "FOO",
+                        "bse_code": "1",
+                        "thesis": "   ",
+                        "kpis": [{"name": "rev", "severity": "material"}],
+                    }
+                ]
+            }
         ),
         encoding="utf-8",
     )
@@ -54,7 +57,7 @@ def test_invalid_status_rejected():
                 "bse_code": "1",
                 "status": "watchlist",
                 "thesis": "why",
-                "kpis": [{"name": "rev"}],
+                "kpis": [{"name": "rev", "severity": "material"}],
             }
         )
 
@@ -88,6 +91,38 @@ def test_manual_loads_without_conditions():
     assert t.scores() is False
 
 
+def test_held_without_bse_code_loads_but_does_not_poll():
+    t = parse_ticker(
+        {
+            "symbol": "ANANTRAJ",
+            "bse_code": "",
+            "thesis": "data centre is the play",
+            "conditions": [
+                {
+                    "text": "capacity stalls",
+                    "check": "quantitative",
+                    "kpi": "dc_capacity_mw",
+                    "severity": "structural",
+                }
+            ],
+        }
+    )
+    assert t.status == "held"
+    assert t.polls() is False
+
+
+def test_condition_without_severity_rejected():
+    with pytest.raises(LedgerError, match="needs severity"):
+        parse_ticker(
+            {
+                "symbol": "FOO",
+                "bse_code": "1",
+                "thesis": "why we own it",
+                "conditions": [{"text": "Moat erodes", "check": "manual"}],
+            }
+        )
+
+
 def test_quantitative_condition_requires_kpi():
     with pytest.raises(LedgerError, match="needs kpi"):
         parse_ticker(
@@ -95,7 +130,9 @@ def test_quantitative_condition_requires_kpi():
                 "symbol": "FOO",
                 "bse_code": "1",
                 "thesis": "why we own it",
-                "conditions": [{"text": "growth stalls", "check": "quantitative"}],
+                "conditions": [
+                    {"text": "growth stalls", "check": "quantitative", "severity": "material"}
+                ],
             }
         )
 
@@ -106,52 +143,61 @@ def test_manual_condition_valid_without_kpi():
             "symbol": "FOO",
             "bse_code": "1",
             "thesis": "why we own it",
-            "conditions": [{"text": "Moat erodes, story stops making sense", "check": "manual"}],
+            "conditions": [
+                {
+                    "text": "Moat erodes, story stops making sense",
+                    "check": "manual",
+                    "severity": "watch",
+                }
+            ],
         }
     )
     assert t.kpis == ()
     assert t.conditions[0].check == "manual"
+    assert t.conditions[0].severity == "watch"
     assert t.quantitative_names() == frozenset()
 
 
 def test_conditions_include_merges_with_entry_level(tmp_path: Path):
-    shared = tmp_path / "shared.yaml"
-    shared.write_text(
+    ledger = tmp_path / "tickers.yaml"
+    ledger.write_text(
         yaml.dump(
             {
-                "quality_default": [
-                    "CFO departs",
+                "shared_conditions": {
+                    "quality_default": [
+                        {"text": "CFO departs", "check": "manual", "severity": "watch"},
+                        {
+                            "text": "Order inflow stops growing",
+                            "check": "quantitative",
+                            "kpi": "order_inflow_ttm",
+                            "severity": "material",
+                        },
+                    ]
+                },
+                "tickers": [
                     {
-                        "text": "Order inflow stops growing",
-                        "check": "quantitative",
-                        "kpi": "order_inflow_ttm",
-                    },
-                ]
+                        "symbol": "FOO",
+                        "bse_code": "1",
+                        "thesis": "why we own it",
+                        "conditions_include": ["quality_default"],
+                        "conditions": [
+                            {
+                                "text": "Moat erodes, story stops making sense",
+                                "check": "manual",
+                                "severity": "watch",
+                            }
+                        ],
+                    }
+                ],
             }
         ),
         encoding="utf-8",
     )
-    ledger = tmp_path / "tickers.yaml"
-    ledger.write_text(
-        yaml.dump(
-            [
-                {
-                    "symbol": "FOO",
-                    "bse_code": "1",
-                    "thesis": "why we own it",
-                    "conditions_include": ["quality_default"],
-                    "conditions": [
-                        {"text": "Moat erodes, story stops making sense", "check": "manual"}
-                    ],
-                }
-            ]
-        ),
-        encoding="utf-8",
-    )
-    tickers = load_tickers(ledger, shared_path=shared)
+    tickers = load_tickers(ledger)
     texts = [c.text for c in tickers[0].conditions]
     assert texts[0] == "CFO departs"
     assert "Order inflow stops growing" in texts
     assert texts[-1] == "Moat erodes, story stops making sense"
     assert {c.check for c in tickers[0].conditions} == {"manual", "quantitative"}
     assert tickers[0].kpis[0].name == "order_inflow_ttm"
+    assert tickers[0].conditions[0].source == "quality_default"

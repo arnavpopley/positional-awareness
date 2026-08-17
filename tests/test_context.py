@@ -28,8 +28,13 @@ def _held():
                     "check": "quantitative",
                     "kpi": "order_inflow_ttm",
                     "threshold": "YoY decline for 2 consecutive quarters",
+                    "severity": "material",
                 },
-                {"text": "Moat erodes, story stops making sense", "check": "manual"},
+                {
+                    "text": "Moat erodes, story stops making sense",
+                    "check": "manual",
+                    "severity": "watch",
+                },
             ],
         }
     )
@@ -87,6 +92,17 @@ def test_context_includes_filings_kpis_and_decisions(tmp_path: Path):
     assert "Q1FY27: 120.0" in text
     assert "pre_results" in text
     assert "anticipatory" in text
+    store.touch_condition(
+        ticker="SUZLON",
+        text="Order inflow stops growing",
+        severity="material",
+        check="quantitative",
+        touched_at=now.date(),
+    )
+    text = render_context(ticker, store, filings_n=20)
+    assert "## Currently touched" in text
+    assert "Order inflow stops growing" in text
+    assert "material" in text
     older = now - timedelta(days=10)
     store.insert_filing(
         filing(

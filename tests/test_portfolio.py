@@ -42,7 +42,7 @@ def _ticker(
             "qty": qty,
             "avg_cost": avg_cost,
             "thesis": thesis,
-            "kpis": [{"name": "rev"}],
+            "kpis": [{"name": "rev", "severity": "material"}],
         }
     )
 
@@ -214,7 +214,7 @@ def test_sync_never_writes_the_ledger(tmp_path: Path, monkeypatch: pytest.Monkey
                 "qty": 10,
                 "avg_cost": 40,
                 "thesis": "Why this position exists.",
-                "kpis": [{"name": "rev"}],
+                "kpis": [{"name": "rev", "severity": "material"}],
             }
         ]
     )

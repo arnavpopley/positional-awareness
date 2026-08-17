@@ -110,11 +110,21 @@ conditions:
     check: quantitative
     kpi: order_inflow_ttm
     threshold: "YoY decline for 2 consecutive quarters"
+    severity: material
   - text: "Moat erodes, story stops making sense"
     check: manual
+    severity: watch
 ```
 
-`check: quantitative` feeds named KPIs into extract/S. `check: manual` is shown in `pos context` (and can be flagged as touched by triage) but **never activates a factor or changes the band**. Shared blocks in `config/shared_conditions.yaml` are referenced as `conditions_include: [quality_default]` and merge ahead of entry-level conditions. Legacy `kpis:` rows still parse as quantitative conditions.
+Every condition requires `severity`: `structural` (the reason the position exists stops being true), `material` (real deterioration), or `watch` (worth knowing, weak on its own). Conditions are **not** individual exit triggers. Touches are stored with severity and date. Escalation is evaluated on **count and severity** inside a rolling **2-quarter** window (~182 days):
+
+| Window | Result |
+|---|---|
+| 1 watch or 1 material | record only, no notification |
+| 2 material, or 1 structural | review, notify |
+| 3+ material, or 1 structural + 1 material | priority review, notify |
+
+Never emit an action verb at any level. `check: quantitative` feeds named KPIs into extract/S. `check: manual` can be flagged as touched and **counts toward escalation**, but **never activates a scoring factor or changes the band**. Shared blocks live in the same `config/tickers.yaml` under `shared_conditions` and are referenced as `conditions_include: [quality_default]`. They merge ahead of entry-level conditions. Legacy `kpis:` rows still parse as quantitative conditions if they carry severity.
 
 ### 1. Always on
 
@@ -162,7 +172,7 @@ PDFs: download, `pdfplumber`. Near-empty text → `needs_manual_read`, still not
 
 - **CLI table:** name, return vs cost, thesis, KPI series, last S, band, next earnings date. `no_thesis` rows sit at the top. Thesis-less Groww holdings plus ledger `no_thesis` names count as outstanding (cache only, never the live API).
 - **`pos sync`:** read-only Groww holdings vs ledger. Report drift and `NO_THESIS` ledger rows; do not write the ledger.
-- **`pos context <TICKER>`:** local markdown dump (thesis, conditions, filings, KPI history, decisions) for pasting into an external chat. No LLM call, no network. `--filings N` and `--since YYYY-MM-DD`.
+- **`pos context <TICKER>`:** local markdown dump (thesis, conditions with severity, currently touched conditions, filings, KPI history, decisions) for pasting into an external chat. No LLM call, no network. `--filings N` and `--since YYYY-MM-DD`.
 - **`pos decide SYMBOL ACTION [NOTE] [--anticipatory]`:** user stamp into `decisions`. `--anticipatory` marks a decision made ahead of a results print. `pos decisions --anticipatory` lists only those.
 - **macOS notification** on: earnings pack, band change, needs_manual_read.
 - **Telegram: later**, not v1.
@@ -182,7 +192,7 @@ PDFs: download, `pdfplumber`. Near-empty text → `needs_manual_read`, still not
 
 ## 6. Storage (SQLite)
 
-- `tickers` / YAML ledger: symbol, bse_code, nse_symbol, **status** (`held` | `exiting` | `event` | `no_thesis` | `manual`), thesis, conditions (quantitative and/or manual), `conditions_include`, qty, avg_cost, confidence, sector, review_by. Shared blocks live in `config/shared_conditions.yaml`.
+- `tickers` / YAML ledger: mapping with `shared_conditions` and `tickers`. Each row: symbol, bse_code, nse_symbol, **status** (`held` | `exiting` | `event` | `no_thesis` | `manual`), thesis, conditions (quantitative and/or manual, each with **severity**), `conditions_include`, qty, avg_cost, confidence, sector, review_by. A blank `bse_code` loads but does not poll.
 - `filings`: id, ticker, exchange, ann_id, category, subcategory, headline, pdf_url, filed_at, hash, filter_status, created_at
 - `scores`: filing_id or event_id, x_kpi, x_book, x_industry, x_price, x_guidance, S, band, low_confidence, active_factors, triage_json, created_at. Inactive x is NULL, not 0. Manual conditions never activate a factor.
 - `kpi_series`: ticker, kpi_name, period, value, source_filing_id
@@ -190,6 +200,7 @@ PDFs: download, `pdfplumber`. Near-empty text → `needs_manual_read`, still not
 - `alerts`: event_id, channel (macos|telegram), sent_at
 - `holdings_cache`: symbol, isin, qty, avg_cost, fetched_at (Groww snapshot; CLI reads this, never the API)
 - `decisions`: ticker, date, action, note, S_at_time, **anticipatory** (user stamp / follow-or-nudge; anticipatory = ahead of a results print)
+- `condition_touches`: ticker, condition_text, severity, check_kind, filing_id, touched_at. Rolling 2-quarter window for escalation.
 
 `data/` gitignored (db + PDFs).
 

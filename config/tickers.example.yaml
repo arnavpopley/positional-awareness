@@ -1,23 +1,34 @@
-# Copy to tickers.yaml and replace with real holdings.
-# status defaults to held, which requires thesis + at least one condition.
-# Other statuses: exiting | event | no_thesis | manual — never auto-assigned.
+# Example shape only. Real book is gitignored config/tickers.yaml.
+# shared_conditions live in the same file as tickers. Every condition needs severity.
 
-- symbol: SUZLON
-  bse_code: "532667"
-  nse_symbol: SUZLON
-  status: held
-  sector: wind
-  qty: 0
-  avg_cost: 0
-  confidence: 70
-  review_by: 2026-11-15
-  thesis: >
-    Two sentences. Why this position exists.
-  conditions_include: [quality_default]
-  conditions:
-    - text: "Order inflow stops growing"
-      check: quantitative
-      kpi: order_inflow_ttm
-      threshold: "YoY decline for 2 consecutive quarters"
-    - text: "Moat erodes, story stops making sense"
+shared_conditions:
+  quality_default:
+    - text: "CFO departs"
       check: manual
+      severity: watch
+    - text: "Auditor resigns or issues a qualified opinion"
+      check: manual
+      severity: structural
+
+tickers:
+  - symbol: SUZLON
+    bse_code: "532667"
+    nse_symbol: SUZLON
+    status: held
+    sector: wind
+    qty: 0
+    avg_cost: 0
+    confidence: 70
+    review_by: 2026-11-15
+    thesis: >
+      Two sentences. Why this position exists.
+    conditions_include: [quality_default]
+    conditions:
+      - text: "Order inflow stops growing"
+        check: quantitative
+        kpi: order_inflow_ttm
+        threshold: "YoY decline for 2 consecutive quarters"
+        severity: material
+      - text: "Moat erodes, story stops making sense"
+        check: manual
+        severity: watch

@@ -49,13 +49,12 @@ def render_context(
     lines.append("")
     if quantitative:
         for cond in quantitative:
-            extra = []
+            extra = [cond.severity]
             if cond.kpi:
                 extra.append(f"kpi={cond.kpi}")
             if cond.threshold:
                 extra.append(cond.threshold)
-            suffix = f" ({'; '.join(extra)})" if extra else ""
-            lines.append(f"- {cond.text}{suffix}")
+            lines.append(f"- {cond.text} ({'; '.join(extra)})")
     else:
         lines.append("- (none)")
     lines.append("")
@@ -64,7 +63,19 @@ def render_context(
     if manual:
         for cond in manual:
             tag = f" [{cond.source}]" if cond.source else ""
-            lines.append(f"- {cond.text}{tag}")
+            lines.append(f"- {cond.text} ({cond.severity}){tag}")
+    else:
+        lines.append("- (none)")
+    lines.append("")
+    lines.append("## Currently touched")
+    lines.append("")
+    touched = store.current_touches(ticker.symbol)
+    if touched:
+        for row in touched:
+            lines.append(
+                f"- {row['touched_at']} {row['condition_text']} "
+                f"({row['severity']}, {row['check_kind']})"
+            )
     else:
         lines.append("- (none)")
     lines.append("")

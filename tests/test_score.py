@@ -350,7 +350,13 @@ def test_manual_condition_never_activates_scoring_factor():
             "symbol": "FOO",
             "bse_code": "1",
             "thesis": "why we own it",
-            "conditions": [{"text": "Moat erodes, story stops making sense", "check": "manual"}],
+            "conditions": [
+                {
+                    "text": "Moat erodes, story stops making sense",
+                    "check": "manual",
+                    "severity": "watch",
+                }
+            ],
         }
     )
     payload = {

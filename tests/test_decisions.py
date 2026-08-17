@@ -13,7 +13,7 @@ def _held():
             "symbol": "SUZLON",
             "bse_code": "532667",
             "thesis": "Two sentences. Why this position exists.",
-            "kpis": [{"name": "rev"}],
+            "kpis": [{"name": "rev", "severity": "material"}],
         }
     )
 

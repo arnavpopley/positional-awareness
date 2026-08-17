@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import sqlite3
 import sys
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -111,6 +111,16 @@ CREATE TABLE IF NOT EXISTS decisions (
     note TEXT NOT NULL DEFAULT '',
     S_at_time REAL,
     anticipatory INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS condition_touches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker TEXT NOT NULL,
+    condition_text TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    check_kind TEXT NOT NULL,
+    filing_id INTEGER,
+    touched_at TEXT NOT NULL
 );
 """
 
@@ -515,6 +525,62 @@ class Store:
             sql += " AND anticipatory = 0"
         sql += " ORDER BY decided_at DESC, id DESC"
         return list(self.conn.execute(sql, params).fetchall())
+
+    def touch_condition(
+        self,
+        *,
+        ticker: str,
+        text: str,
+        severity: str,
+        check: str,
+        filing_id: int | None = None,
+        touched_at: date | datetime | None = None,
+    ) -> int:
+        if isinstance(touched_at, datetime):
+            when = touched_at.date().isoformat()
+        elif isinstance(touched_at, date):
+            when = touched_at.isoformat()
+        else:
+            when = datetime.now(tz=IST).date().isoformat()
+        cur = self.conn.execute(
+            """
+            INSERT INTO condition_touches (
+                ticker, condition_text, severity, check_kind, filing_id, touched_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (ticker, text, severity, check, filing_id, when),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def touches_in_window(
+        self,
+        symbol: str,
+        *,
+        since: date,
+        until: date,
+    ) -> list[sqlite3.Row]:
+        return list(
+            self.conn.execute(
+                """
+                SELECT * FROM condition_touches
+                WHERE ticker = ?
+                  AND date(touched_at) >= ?
+                  AND date(touched_at) <= ?
+                ORDER BY touched_at, id
+                """,
+                (symbol, since.isoformat(), until.isoformat()),
+            ).fetchall()
+        )
+
+    def current_touches(self, symbol: str, *, as_of: date | None = None) -> list[sqlite3.Row]:
+        end = as_of or datetime.now(tz=IST).date()
+        start = end - timedelta(days=182)
+        rows = self.touches_in_window(symbol, since=start, until=end)
+        latest: dict[str, sqlite3.Row] = {}
+        for row in rows:
+            latest[str(row["condition_text"])] = row
+        return list(latest.values())
 
     def alert_sent(self, filing_id: int, channel: str) -> bool:
         row = self.conn.execute(
