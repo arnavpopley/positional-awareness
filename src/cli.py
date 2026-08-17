@@ -33,7 +33,7 @@ def render_table(
                 row.ret,
                 row.S,
                 row.band,
-                row.thesis,
+                row.thesis_short,
                 row.next_event,
             )
             for row in book

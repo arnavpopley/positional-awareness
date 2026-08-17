@@ -15,7 +15,10 @@ def _held():
         {
             "symbol": "SUZLON",
             "bse_code": "532667",
-            "thesis": "Two sentences. Why this position exists.",
+            "thesis": (
+                "Two sentences. Why this position exists. "
+                "A third sentence so the page must not truncate with an ellipsis."
+            ),
             "confidence": 70,
             "conditions": [
                 {
@@ -58,6 +61,8 @@ def test_book_page_lists_names(tmp_path: Path):
     body = response.text
     assert "SUZLON" in body
     assert "Two sentences" in body
+    assert "must not truncate with an ellipsis" in body
+    assert "…" not in body
     assert "never places a trade" in body
     for verb in ("buy", "sell", "add", "trim"):
         assert f">{verb}<" not in body.lower()

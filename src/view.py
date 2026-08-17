@@ -51,6 +51,7 @@ class BookRow:
     S: str
     band: str
     thesis: str
+    thesis_short: str
     next_event: str
 
 
@@ -85,7 +86,8 @@ def book_rows(
                 ret_value=ret_val,
                 S=fmt_s(s_val),
                 band=band,
-                thesis=ticker.thesis_short(72),
+                thesis=ticker.thesis,
+                thesis_short=ticker.thesis_short(),
                 next_event=nxt,
             )
         )
