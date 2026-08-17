@@ -1,18 +1,19 @@
 :root {
-  --paper: #f4efe6;
-  --ink: #1c1916;
-  --muted: #6f675e;
-  --line: #d8d0c4;
-  --up: #2c5e3a;
-  --down: #8b2e24;
-  --held: #1c1916;
-  --exiting: #7a4a12;
-  --event: #2a4a6a;
-  --manual: #5a4a6a;
-  --no_thesis: #8b2e24;
+  --paper: #000000;
+  --ink: #00ff00;
+  --muted: #00aa00;
+  --line: #003b00;
+  --up: #00ff00;
+  --down: #007a00;
+  --held: #00ff00;
+  --exiting: #00cc00;
+  --event: #00aa00;
+  --manual: #009900;
+  --no_thesis: #00ff00;
 }
 
 * { box-sizing: border-box; }
+html { color-scheme: dark; }
 html, body {
   margin: 0;
   background: var(--paper);
@@ -20,6 +21,10 @@ html, body {
   font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   font-size: 17px;
   line-height: 1.45;
+}
+::selection {
+  background: #00ff00;
+  color: #000000;
 }
 a { color: inherit; }
 .mast {
