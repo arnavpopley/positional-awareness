@@ -89,8 +89,32 @@ A **hit** for later evaluation: did the named KPI subsequently confirm the call?
 
 ### 0. Setup (once per name)
 
-User supplies: why they own it, 1–3 KPIs, qty + avg cost, confidence, optional sector, BSE scrip code.  
-LLM drafts thesis + KPI list. **User confirms before write.** No thesis → no tracking.
+User supplies: why they own it, 1–3 conditions (quantitative KPIs and/or manual checks), qty + avg cost, confidence, optional sector, BSE scrip code, **status**.  
+LLM drafts thesis + conditions. **User confirms before write.** Status is never auto-assigned; omitting it defaults to `held`, which refuses to load without a thesis and at least one condition.
+
+**Ledger statuses**
+
+| status | Poll | Score | Conditions | Surface |
+|---|---|---|---|---|
+| `held` (default) | full | yes | thesis + ≥1 condition required | CLI, notify, context |
+| `exiting` | results and board-meeting intimations only | no | optional | CLI, those notifies |
+| `event` | no | no | optional | CLI table and weekly nudge only |
+| `no_thesis` | no | no | optional | `pos sync` + top of CLI table as outstanding |
+| `manual` | no (ETFs / no filings) | no | optional | CLI table and weekly nudge only |
+
+**Conditions**
+
+```
+conditions:
+  - text: "Order inflow stops growing"
+    check: quantitative
+    kpi: order_inflow_ttm
+    threshold: "YoY decline for 2 consecutive quarters"
+  - text: "Moat erodes, story stops making sense"
+    check: manual
+```
+
+`check: quantitative` feeds named KPIs into extract/S. `check: manual` is shown in `pos context` (and can be flagged as touched by triage) but **never activates a factor or changes the band**. Shared blocks in `config/shared_conditions.yaml` are referenced as `conditions_include: [quality_default]` and merge ahead of entry-level conditions. Legacy `kpis:` rows still parse as quantitative conditions.
 
 ### 1. Always on
 
@@ -136,8 +160,10 @@ PDFs: download, `pdfplumber`. Near-empty text → `needs_manual_read`, still not
 
 ### 4. v1 surface
 
-- **CLI table:** name, return vs cost, thesis, KPI series, last S, band, next earnings date. Thesis-less holdings count from the Groww cache (never the live API).
-- **`pos sync`:** read-only Groww holdings vs ledger. Report drift; do not write the ledger.
+- **CLI table:** name, return vs cost, thesis, KPI series, last S, band, next earnings date. `no_thesis` rows sit at the top. Thesis-less Groww holdings plus ledger `no_thesis` names count as outstanding (cache only, never the live API).
+- **`pos sync`:** read-only Groww holdings vs ledger. Report drift and `NO_THESIS` ledger rows; do not write the ledger.
+- **`pos context <TICKER>`:** local markdown dump (thesis, conditions, filings, KPI history, decisions) for pasting into an external chat. No LLM call, no network. `--filings N` and `--since YYYY-MM-DD`.
+- **`pos decide SYMBOL ACTION [NOTE] [--anticipatory]`:** user stamp into `decisions`. `--anticipatory` marks a decision made ahead of a results print. `pos decisions --anticipatory` lists only those.
 - **macOS notification** on: earnings pack, band change, needs_manual_read.
 - **Telegram: later**, not v1.
 
@@ -156,14 +182,14 @@ PDFs: download, `pdfplumber`. Near-empty text → `needs_manual_read`, still not
 
 ## 6. Storage (SQLite)
 
-- `tickers` / YAML ledger: symbol, bse_code, nse_symbol, status (held|watchlist), thesis, conditions/KPIs, qty, avg_cost, confidence, sector, review_by
+- `tickers` / YAML ledger: symbol, bse_code, nse_symbol, **status** (`held` | `exiting` | `event` | `no_thesis` | `manual`), thesis, conditions (quantitative and/or manual), `conditions_include`, qty, avg_cost, confidence, sector, review_by. Shared blocks live in `config/shared_conditions.yaml`.
 - `filings`: id, ticker, exchange, ann_id, category, subcategory, headline, pdf_url, filed_at, hash, filter_status, created_at
-- `scores`: filing_id or event_id, x_kpi, x_book, x_industry, x_price, x_guidance, S, band, low_confidence, active_factors, triage_json, created_at. Inactive x is NULL, not 0.
+- `scores`: filing_id or event_id, x_kpi, x_book, x_industry, x_price, x_guidance, S, band, low_confidence, active_factors, triage_json, created_at. Inactive x is NULL, not 0. Manual conditions never activate a factor.
 - `kpi_series`: ticker, kpi_name, period, value, source_filing_id
 - `extractions`: filing_hash, filing_id, text, needs_manual_read, kpis_json, model, created_at. Cached by filing hash so Gemini is never re-called on a re-run.
 - `alerts`: event_id, channel (macos|telegram), sent_at
 - `holdings_cache`: symbol, isin, qty, avg_cost, fetched_at (Groww snapshot; CLI reads this, never the API)
-- `decisions`: ticker, date, action, note, S_at_time (user stamp / follow-or-nudge)
+- `decisions`: ticker, date, action, note, S_at_time, **anticipatory** (user stamp / follow-or-nudge; anticipatory = ahead of a results print)
 
 `data/` gitignored (db + PDFs).
 
@@ -173,7 +199,7 @@ PDFs: download, `pdfplumber`. Near-empty text → `needs_manual_read`, still not
 
 **Phase 0 (only committed v1 scope)**
 
-1. `config/tickers.yaml` — user fills real holdings. Enforce thesis + ≥1 KPI at load. Example file is a shape, not fake holdings.
+1. `config/tickers.yaml` — user fills real holdings. `held` enforces thesis + ≥1 condition at load. Other statuses load without conditions. Never auto-assign status.
 2. BSE source + dedupe + SQLite.
 3. Kill-list filter.
 4. CLI table + delayed quotes (return vs cost).
@@ -186,7 +212,7 @@ Ship when: a board-meeting or results filing for a held ticker produces a macOS 
 
 - PDF extract + Gemini JSON extract of named KPIs + frozen S + rec text with arithmetic.
 - Earnings pack (intimation → date → few-days-out notify).
-- `decisions` log CLI (`pa decide SUZLON trim "deliveries miss"`).
+- `decisions` log CLI (`pos decide SUZLON size_down "deliveries miss"`; optional `--anticipatory`).
 - Faster poll on results morning.
 
 **Phase 1b (later)**

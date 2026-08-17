@@ -1,22 +1,23 @@
 # Copy to tickers.yaml and replace with real holdings.
-# No thesis / no kpis → the poller must refuse to watch the name.
+# status defaults to held, which requires thesis + at least one condition.
+# Other statuses: exiting | event | no_thesis | manual — never auto-assigned.
 
 - symbol: SUZLON
   bse_code: "532667"
   nse_symbol: SUZLON
-  status: held                 # held | watchlist
-  sector: wind                 # optional; v1 industry factor uses peer tags
+  status: held
+  sector: wind
   qty: 0
   avg_cost: 0
-  confidence: 70               # 0–100; disagreement flag, not inside S
+  confidence: 70
   review_by: 2026-11-15
-  # results_due: 2026-08-20   # optional; else parsed from board-meeting intimations
   thesis: >
     Two sentences. Why this position exists.
-  kpis:
-    - name: deliveries_mw
-      label: Quarterly deliveries (MW)
-      check: Investor presentation
-    - name: order_book_gw
-      label: Order book (GW)
-      check: Quarterly disclosure + order announcements
+  conditions_include: [quality_default]
+  conditions:
+    - text: "Order inflow stops growing"
+      check: quantitative
+      kpi: order_inflow_ttm
+      threshold: "YoY decline for 2 consecutive quarters"
+    - text: "Moat erodes, story stops making sense"
+      check: manual

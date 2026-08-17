@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import date
 
-from src.ledger import LedgerError, Ticker, load_tickers
+from src.context import context_command
+from src.ledger import LedgerError, Ticker, by_symbol, load_tickers
 from src.portfolio.base import Holding
 from src.portfolio.reconcile import reconcile, thesis_less_holdings
 from src.quotes import last_price, pct_return
@@ -29,6 +31,12 @@ def _fmt_ret(value: float | None) -> str:
     return f"{sign}{value:.1f}%"
 
 
+def _table_order(tickers: list[Ticker]) -> list[Ticker]:
+    outstanding = [t for t in tickers if t.status == "no_thesis"]
+    rest = [t for t in tickers if t.status != "no_thesis"]
+    return outstanding + rest
+
+
 def render_table(
     *,
     fetch_quotes: bool = True,
@@ -40,10 +48,12 @@ def render_table(
     store = store or Store()
     try:
         cached = store.holdings_cache()
-        missing = len(thesis_less_holdings(tickers, cached))
+        missing = len(thesis_less_holdings(tickers, cached)) + sum(
+            1 for t in tickers if t.status == "no_thesis"
+        )
         rows: list[tuple[str, ...]] = []
         headers = ("SYMBOL", "QTY", "AVG COST", "LAST", "RETURN", "THESIS", "NEXT")
-        for ticker in tickers:
+        for ticker in _table_order(tickers):
             last = last_price(ticker) if fetch_quotes else None
             nxt = store.next_event(ticker.symbol) or (
                 f"Results due {ticker.results_due.isoformat()}" if ticker.results_due else "—"
@@ -114,6 +124,63 @@ def sync_command(*, store: Store | None = None, portfolio=None) -> int:
             store.close()
 
 
+def decide_command(
+    symbol: str,
+    action: str,
+    note: str = "",
+    *,
+    anticipatory: bool = False,
+    store: Store | None = None,
+    tickers: list[Ticker] | None = None,
+) -> int:
+    own_store = store is None
+    store = store or Store()
+    try:
+        book = tickers if tickers is not None else load_tickers()
+        ticker = by_symbol(book, symbol)
+        row_id = store.insert_decision(
+            ticker=ticker.symbol,
+            action=action,
+            note=note,
+            S_at_time=store.latest_S(ticker.symbol),
+            anticipatory=anticipatory,
+        )
+        row = store.conn.execute(
+            "SELECT * FROM decisions WHERE id = ?", (row_id,)
+        ).fetchone()
+        flag = " anticipatory" if row["anticipatory"] else ""
+        print(f"{row['ticker']} {row['action']}{flag} {row['note']}".rstrip())
+        return 0
+    except LedgerError as exc:
+        print(f"pos decide: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        if own_store:
+            store.close()
+
+
+def list_decisions_command(
+    *,
+    anticipatory: bool = False,
+    store: Store | None = None,
+) -> int:
+    own_store = store is None
+    store = store or Store()
+    try:
+        rows = store.decisions_for(anticipatory=True if anticipatory else None)
+        for row in rows:
+            flag = " anticipatory" if row["anticipatory"] else ""
+            s_bit = f" S={row['S_at_time']}" if row["S_at_time"] is not None else ""
+            print(
+                f"{row['ticker']} {row['decided_at']} {row['action']}{flag}{s_bit} "
+                f"{row['note']}".rstrip()
+            )
+        return 0
+    finally:
+        if own_store:
+            store.close()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="pos",
@@ -129,10 +196,50 @@ def main(argv: list[str] | None = None) -> int:
         "sync",
         help="fetch Groww holdings and print ledger drift (read-only)",
     )
+    ctx = sub.add_parser(
+        "context",
+        help="print local markdown for one name (no network)",
+    )
+    ctx.add_argument("symbol")
+    ctx.add_argument("--filings", type=int, default=20, metavar="N")
+    ctx.add_argument("--since", type=date.fromisoformat, default=None, metavar="YYYY-MM-DD")
+    decide = sub.add_parser(
+        "decide",
+        help="stamp a user decision against a ledger name",
+    )
+    decide.add_argument("symbol")
+    decide.add_argument("action")
+    decide.add_argument("note", nargs="?", default="")
+    decide.add_argument(
+        "--anticipatory",
+        action="store_true",
+        help="decision made ahead of a results print",
+    )
+    listed = sub.add_parser("decisions", help="list stamped decisions")
+    listed.add_argument(
+        "--anticipatory",
+        action="store_true",
+        help="only decisions made ahead of a results print",
+    )
     args = parser.parse_args(argv)
     try:
         if args.command == "sync":
             return sync_command()
+        if args.command == "context":
+            return context_command(
+                args.symbol,
+                filings_n=args.filings,
+                since=args.since,
+            )
+        if args.command == "decide":
+            return decide_command(
+                args.symbol,
+                args.action,
+                args.note,
+                anticipatory=args.anticipatory,
+            )
+        if args.command == "decisions":
+            return list_decisions_command(anticipatory=args.anticipatory)
         print(render_table(fetch_quotes=not args.no_quotes))
         return 0
     except LedgerError as exc:

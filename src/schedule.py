@@ -45,6 +45,7 @@ def tickers_for_slot(
 ) -> list[Ticker]:
     """kind is 'ordinary' (fixed IST slots) or 'interval' (results week/morning)."""
     ist = now_ist(now)
+    tickers = [t for t in tickers if t.polls()]
     chosen: list[Ticker] = []
     if kind == "ordinary":
         candidates = list(tickers)

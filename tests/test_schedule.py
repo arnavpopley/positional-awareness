@@ -49,3 +49,28 @@ def test_interval_only_results_week_and_not_overnight(tmp_path: Path):
     weekend = datetime(2026, 8, 15, 12, 0, tzinfo=IST)  # Saturday
     assert tickers_for_slot([t], store, kind="interval", now=weekend) == []
     store.close()
+
+
+def test_ordinary_slot_skips_non_poll_statuses(tmp_path: Path):
+    store = Store(tmp_path / "pa.sqlite")
+    now = datetime(2026, 8, 14, 9, 46, tzinfo=IST)
+    held = _ticker()
+    parked = Ticker(
+        symbol="GOLDBEES",
+        bse_code="",
+        nse_symbol="GOLDBEES",
+        status="manual",
+        sector=None,
+        qty=1,
+        avg_cost=1,
+        confidence=0,
+        review_by=None,
+        thesis="",
+        kpis=(),
+    )
+    names = [
+        x.symbol
+        for x in tickers_for_slot([held, parked], store, kind="ordinary", now=now)
+    ]
+    assert names == ["SUZLON"]
+    store.close()

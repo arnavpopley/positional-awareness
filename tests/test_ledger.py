@@ -9,7 +9,12 @@ from src.ledger import LedgerError, load_tickers, parse_ticker
 def test_example_ledger_loads():
     tickers = load_tickers(Path("config/tickers.example.yaml"))
     assert tickers[0].symbol == "SUZLON"
+    assert tickers[0].status == "held"
     assert tickers[0].kpis
+    names = {c.text for c in tickers[0].conditions}
+    assert any(c.check == "quantitative" for c in tickers[0].conditions)
+    assert "CFO departs" in names
+    assert "Moat erodes, story stops making sense" in names
 
 
 def test_refuse_no_thesis(tmp_path: Path):
@@ -31,6 +36,122 @@ def test_refuse_no_thesis(tmp_path: Path):
         load_tickers(path)
 
 
-def test_refuse_no_kpi():
-    with pytest.raises(LedgerError, match="no KPI"):
-        parse_ticker({"symbol": "FOO", "bse_code": "1", "thesis": "why we own it", "kpis": []})
+def test_refuse_no_condition():
+    with pytest.raises(LedgerError, match="no condition"):
+        parse_ticker({"symbol": "FOO", "bse_code": "1", "thesis": "why we own it"})
+
+
+def test_unspecified_status_defaults_to_held_and_fails_without_thesis():
+    with pytest.raises(LedgerError, match="no thesis"):
+        parse_ticker({"symbol": "FOO", "bse_code": "1"})
+
+
+def test_invalid_status_rejected():
+    with pytest.raises(LedgerError, match="status must be"):
+        parse_ticker(
+            {
+                "symbol": "FOO",
+                "bse_code": "1",
+                "status": "watchlist",
+                "thesis": "why",
+                "kpis": [{"name": "rev"}],
+            }
+        )
+
+
+def test_exiting_loads_without_conditions():
+    t = parse_ticker({"symbol": "FOO", "bse_code": "1", "status": "exiting"})
+    assert t.status == "exiting"
+    assert t.conditions == ()
+    assert t.polls() is True
+    assert t.scores() is False
+
+
+def test_event_loads_without_conditions_or_bse():
+    t = parse_ticker({"symbol": "FOO", "status": "event"})
+    assert t.status == "event"
+    assert t.polls() is False
+    assert t.scores() is False
+
+
+def test_no_thesis_loads_without_thesis_or_conditions():
+    t = parse_ticker({"symbol": "FOO", "bse_code": "1", "status": "no_thesis"})
+    assert t.status == "no_thesis"
+    assert t.thesis == ""
+    assert t.polls() is False
+
+
+def test_manual_loads_without_conditions():
+    t = parse_ticker({"symbol": "GOLDBEES", "status": "manual", "nse_symbol": "GOLDBEES"})
+    assert t.status == "manual"
+    assert t.polls() is False
+    assert t.scores() is False
+
+
+def test_quantitative_condition_requires_kpi():
+    with pytest.raises(LedgerError, match="needs kpi"):
+        parse_ticker(
+            {
+                "symbol": "FOO",
+                "bse_code": "1",
+                "thesis": "why we own it",
+                "conditions": [{"text": "growth stalls", "check": "quantitative"}],
+            }
+        )
+
+
+def test_manual_condition_valid_without_kpi():
+    t = parse_ticker(
+        {
+            "symbol": "FOO",
+            "bse_code": "1",
+            "thesis": "why we own it",
+            "conditions": [{"text": "Moat erodes, story stops making sense", "check": "manual"}],
+        }
+    )
+    assert t.kpis == ()
+    assert t.conditions[0].check == "manual"
+    assert t.quantitative_names() == frozenset()
+
+
+def test_conditions_include_merges_with_entry_level(tmp_path: Path):
+    shared = tmp_path / "shared.yaml"
+    shared.write_text(
+        yaml.dump(
+            {
+                "quality_default": [
+                    "CFO departs",
+                    {
+                        "text": "Order inflow stops growing",
+                        "check": "quantitative",
+                        "kpi": "order_inflow_ttm",
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    ledger = tmp_path / "tickers.yaml"
+    ledger.write_text(
+        yaml.dump(
+            [
+                {
+                    "symbol": "FOO",
+                    "bse_code": "1",
+                    "thesis": "why we own it",
+                    "conditions_include": ["quality_default"],
+                    "conditions": [
+                        {"text": "Moat erodes, story stops making sense", "check": "manual"}
+                    ],
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    tickers = load_tickers(ledger, shared_path=shared)
+    texts = [c.text for c in tickers[0].conditions]
+    assert texts[0] == "CFO departs"
+    assert "Order inflow stops growing" in texts
+    assert texts[-1] == "Moat erodes, story stops making sense"
+    assert {c.check for c in tickers[0].conditions} == {"manual", "quantitative"}
+    assert tickers[0].kpis[0].name == "order_inflow_ttm"

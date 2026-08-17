@@ -5,7 +5,7 @@ import math
 import re
 from dataclasses import dataclass, replace
 
-from src.ledger import Ticker
+from src.ledger import Ticker, names_match
 
 # Frozen beta weights (SPEC.md §3). Do not retune.
 WEIGHTS: dict[str, float] = {
@@ -204,7 +204,23 @@ def _kpi_rows(payload: dict | None) -> list[dict]:
     return [row for row in rows if isinstance(row, dict)]
 
 
-def kpi_factor(payload: dict | None) -> Factor:
+def _listed_kpi_names(ticker: Ticker | None) -> frozenset[str] | None:
+    """None means no ticker filter (unit tests). Empty means nothing may activate."""
+    if ticker is None:
+        return None
+    return ticker.quantitative_names()
+
+
+def _row_listed(name: str, allowed: frozenset[str] | None) -> bool:
+    if allowed is None:
+        return True
+    return any(names_match(name, listed) for listed in allowed)
+
+
+def kpi_factor(payload: dict | None, ticker: Ticker | None = None) -> Factor:
+    allowed = _listed_kpi_names(ticker)
+    if allowed is not None and not allowed:
+        return inactive()
     xs: list[float] = []
     raws: list[float] = []
     for row in _kpi_rows(payload):
@@ -212,6 +228,8 @@ def kpi_factor(payload: dict | None) -> Factor:
             continue
         name = str(row.get("name") or "")
         if _is_book_kpi(name):
+            continue
+        if not _row_listed(name, allowed):
             continue
         raw = _qoq(row.get("value"), row.get("prior_value"))
         if raw is None:
@@ -223,7 +241,10 @@ def kpi_factor(payload: dict | None) -> Factor:
     return active(sum(xs) / len(xs), raw=sum(raws) / len(raws))
 
 
-def book_factor(payload: dict | None) -> Factor:
+def book_factor(payload: dict | None, ticker: Ticker | None = None) -> Factor:
+    allowed = _listed_kpi_names(ticker)
+    if allowed is not None and not allowed:
+        return inactive()
     if not payload:
         return inactive()
     order = payload.get("order") if isinstance(payload.get("order"), dict) else {}
@@ -250,6 +271,8 @@ def book_factor(payload: dict | None) -> Factor:
         name = str(row.get("name") or "")
         if not _is_book_kpi(name):
             continue
+        if not _row_listed(name, allowed):
+            continue
         raw = _qoq(row.get("value"), row.get("prior_value"))
         if raw is None:
             continue
@@ -260,7 +283,9 @@ def book_factor(payload: dict | None) -> Factor:
     return active(sum(xs) / len(xs), raw=sum(raws) / len(raws))
 
 
-def guidance_factor(payload: dict | None) -> Factor:
+def guidance_factor(payload: dict | None, ticker: Ticker | None = None) -> Factor:
+    if _listed_kpi_names(ticker) == frozenset():
+        return inactive()
     if not payload:
         return inactive()
     g = payload.get("guidance") if isinstance(payload.get("guidance"), dict) else {}
@@ -348,11 +373,11 @@ def score_extraction(
     """Deterministic S from Gemini JSON. Gemini is not called here."""
     record_kpi_prints(payload, ticker, store, filing_id)
     result = score(
-        kpi=kpi_factor(payload),
-        book=book_factor(payload),
+        kpi=kpi_factor(payload, ticker),
+        book=book_factor(payload, ticker),
         industry=industry_factor(ticker, peers, store),
         price=price_factor(price_return_20d),
-        guidance=guidance_factor(payload),
+        guidance=guidance_factor(payload, ticker),
     )
     if needs_manual_read:
         result = replace(result, band=None)

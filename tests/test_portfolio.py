@@ -75,9 +75,17 @@ def test_reconcile_ledger_entry_not_held():
     assert lines == ["LEDGER ENTRY NOT HELD: INFY"]
 
 
-def test_reconcile_watchlist_without_groww_holding_is_not_reported():
+def test_reconcile_ledger_no_thesis_status():
     lines = reconcile(
-        [_ticker("SUZLON"), _ticker("INFY", status="watchlist", qty=0, avg_cost=0)],
+        [_ticker("SUZLON"), _ticker("RELIANCE", status="no_thesis")],
+        [_holding("SUZLON"), _holding("RELIANCE")],
+    )
+    assert lines == ["NO_THESIS: RELIANCE"]
+
+
+def test_reconcile_event_without_groww_holding_is_not_reported():
+    lines = reconcile(
+        [_ticker("SUZLON"), _ticker("INFY", status="event", qty=0, avg_cost=0)],
         [_holding("SUZLON")],
     )
     assert lines == []

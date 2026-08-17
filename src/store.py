@@ -102,6 +102,16 @@ CREATE TABLE IF NOT EXISTS kpi_series (
     created_at TEXT NOT NULL,
     UNIQUE(ticker, kpi_name, period)
 );
+
+CREATE TABLE IF NOT EXISTS decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker TEXT NOT NULL,
+    decided_at TEXT NOT NULL,
+    action TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    S_at_time REAL,
+    anticipatory INTEGER NOT NULL DEFAULT 0
+);
 """
 
 
@@ -136,6 +146,11 @@ class Store:
         if score_cols and "low_confidence" not in score_cols:
             self.conn.execute(
                 "ALTER TABLE scores ADD COLUMN low_confidence INTEGER NOT NULL DEFAULT 0"
+            )
+        decision_cols = {row[1] for row in self.conn.execute("PRAGMA table_info(decisions)")}
+        if decision_cols and "anticipatory" not in decision_cols:
+            self.conn.execute(
+                "ALTER TABLE decisions ADD COLUMN anticipatory INTEGER NOT NULL DEFAULT 0"
             )
         self.conn.commit()
 
@@ -404,6 +419,102 @@ class Store:
             if len(qoq) > len(best):
                 best = qoq
         return best
+
+    def filings_for(
+        self,
+        symbol: str,
+        *,
+        limit: int = 20,
+        since: date | None = None,
+    ) -> list[sqlite3.Row]:
+        sql = """
+            SELECT filed_at, category, subcategory, headline, filter_status
+            FROM filings
+            WHERE ticker = ?
+        """
+        params: list[object] = [symbol]
+        if since is not None:
+            sql += " AND filed_at IS NOT NULL AND date(filed_at) >= ?"
+            params.append(since.isoformat())
+        sql += " ORDER BY filed_at DESC, id DESC LIMIT ?"
+        params.append(limit)
+        return list(self.conn.execute(sql, params).fetchall())
+
+    def kpi_prints_for(self, symbol: str) -> list[sqlite3.Row]:
+        return list(
+            self.conn.execute(
+                """
+                SELECT kpi_name, period, value, source_filing_id
+                FROM kpi_series
+                WHERE ticker = ?
+                ORDER BY kpi_name, id
+                """,
+                (symbol,),
+            ).fetchall()
+        )
+
+    def latest_S(self, symbol: str) -> float | None:
+        row = self.conn.execute(
+            """
+            SELECT s.S
+            FROM scores s
+            JOIN filings f ON f.id = s.filing_id
+            WHERE f.ticker = ?
+            ORDER BY s.id DESC
+            LIMIT 1
+            """,
+            (symbol,),
+        ).fetchone()
+        if row is None or row["S"] is None:
+            return None
+        return float(row["S"])
+
+    def insert_decision(
+        self,
+        *,
+        ticker: str,
+        action: str,
+        note: str = "",
+        S_at_time: float | None = None,
+        anticipatory: bool = False,
+        decided_at: datetime | None = None,
+    ) -> int:
+        when = decided_at.astimezone(UTC).isoformat(timespec="seconds") if decided_at else _utcnow()
+        cur = self.conn.execute(
+            """
+            INSERT INTO decisions (
+                ticker, decided_at, action, note, S_at_time, anticipatory
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                ticker,
+                when,
+                action,
+                note,
+                S_at_time,
+                int(anticipatory),
+            ),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def decisions_for(
+        self,
+        symbol: str | None = None,
+        *,
+        anticipatory: bool | None = None,
+    ) -> list[sqlite3.Row]:
+        sql = "SELECT * FROM decisions WHERE 1=1"
+        params: list[object] = []
+        if symbol is not None:
+            sql += " AND ticker = ?"
+            params.append(symbol)
+        if anticipatory is True:
+            sql += " AND anticipatory = 1"
+        elif anticipatory is False:
+            sql += " AND anticipatory = 0"
+        sql += " ORDER BY decided_at DESC, id DESC"
+        return list(self.conn.execute(sql, params).fetchall())
 
     def alert_sent(self, filing_id: int, channel: str) -> bool:
         row = self.conn.execute(

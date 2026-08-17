@@ -340,3 +340,35 @@ def test_ingest_skips_scoring_when_extractor_returns_none(tmp_path: Path):
     n = store.conn.execute("SELECT COUNT(*) AS n FROM scores").fetchone()["n"]
     assert n == 0
     store.close()
+
+
+def test_manual_condition_never_activates_scoring_factor():
+    from src.ledger import parse_ticker
+
+    ticker = parse_ticker(
+        {
+            "symbol": "FOO",
+            "bse_code": "1",
+            "thesis": "why we own it",
+            "conditions": [{"text": "Moat erodes, story stops making sense", "check": "manual"}],
+        }
+    )
+    payload = {
+        "kpis": [
+            {
+                "name": "revenue",
+                "found": True,
+                "value": 130,
+                "prior_value": 100,
+                "period": "Q1",
+            }
+        ],
+        "order": {"found": True, "value": 200, "q_sales": 100},
+        "guidance": {"touches_named_kpi": True, "direction": 1},
+    }
+    result = score_extraction(payload, ticker=ticker)
+    assert result.x["kpi"] is None
+    assert result.x["book"] is None
+    assert result.x["guidance"] is None
+    assert result.S is None
+    assert result.band is None

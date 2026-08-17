@@ -1,0 +1,12 @@
+# Named condition blocks. Ledger rows reference them with conditions_include.
+# Strings become check: manual. Mappings use the same shape as entry-level conditions.
+
+quality_default:
+  - revenue or profit growth decelerates YoY for 2 consecutive quarters
+  - EBITDA margin compresses YoY for 2 consecutive quarters
+  - operating cash flow diverges from reported profit for 2 consecutive quarters
+  - debt rises materially without matching capex
+  - promoter holding falls or pledge rises
+  - auditor resigns or issues a qualified opinion
+  - CFO departs
+  - any regulator adjudication, penalty, or show-cause order

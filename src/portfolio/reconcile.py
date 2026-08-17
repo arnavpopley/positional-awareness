@@ -59,6 +59,13 @@ def reconcile(tickers: list[Ticker], holdings: list[Holding]) -> list[str]:
                 f"cost={_cost(holding.avg_cost)}"
             )
 
+    ledger_no_thesis = [
+        f"NO_THESIS: {t.symbol}"
+        for t in sorted(
+            (t for t in tickers if t.status == "no_thesis"),
+            key=lambda t: t.symbol,
+        )
+    ]
     held_unmatched = [
         t
         for t in tickers
@@ -68,10 +75,10 @@ def reconcile(tickers: list[Ticker], holdings: list[Holding]) -> list[str]:
         f"LEDGER ENTRY NOT HELD: {t.symbol}"
         for t in sorted(held_unmatched, key=lambda t: t.symbol)
     ]
-    # Specified order: no-thesis, ledger-not-held, then drift.
-    no_thesis = [line for line in lines if line.startswith("HOLDING WITH NO THESIS:")]
+    # Specified order: groww unmatched, ledger no_thesis, not-held, then drift.
+    groww_unmatched = [line for line in lines if line.startswith("HOLDING WITH NO THESIS:")]
     drift = [line for line in lines if line.startswith("DRIFT:")]
-    return no_thesis + missing_lines + drift
+    return groww_unmatched + ledger_no_thesis + missing_lines + drift
 
 
 def main(argv: list[str] | None = None) -> int:

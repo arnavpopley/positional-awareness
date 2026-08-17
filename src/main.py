@@ -103,7 +103,16 @@ def ingest(
             continue
         if not is_notify_fresh(filing, now):
             continue
-        result = do_extract(filing, book.get(filing.ticker), store)
+        row_ticker = book.get(filing.ticker)
+        if row_ticker is not None and not row_ticker.polls():
+            continue
+        exiting = row_ticker is not None and row_ticker.status == "exiting"
+        if exiting and not (
+            is_board_meeting_intimation(filing) or is_results_or_ppt(filing)
+        ):
+            continue
+        scoreable = row_ticker is None or row_ticker.scores()
+        result = do_extract(filing, row_ticker, store) if scoreable else None
         scored = None
         manual = False
         if result is not None:
@@ -116,7 +125,7 @@ def ingest(
             payload = getattr(result, "kpis_json", None)
             scored = do_score(
                 payload,
-                ticker=book.get(filing.ticker),
+                ticker=row_ticker,
                 peers=peer_list,
                 store=store,
                 needs_manual_read=manual,
