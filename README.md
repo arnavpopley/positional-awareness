@@ -41,6 +41,6 @@ uv sync --group dev
 | `uv run python -m src.extract path/to.pdf` | pdfplumber text extract (no Gemini). Caps at ~15k chars. |
 | `uv run pytest` | Filter + dedupe + cadence + extract tests |
 
-Keep the scheduler alive with `config/launchd.plist.example` (replace `REPO`). Never faster than 15 minutes.
+Keep the scheduler alive with `config/launchd.plist.example` (replace `REPO`). Keep the local page alive with `config/launchd-web.plist.example`. Never faster than 15 minutes.
 
 Do not implement from a cold chat without SPEC.md and BUILD_PROMPT.md.
