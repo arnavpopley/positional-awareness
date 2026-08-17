@@ -69,6 +69,17 @@ def stage_deploy(dest: Path, *, fetch_quotes: bool = False) -> Path:
     return dest
 
 
+def _logged_in() -> bool:
+    result = subprocess.run(
+        ["npx", "--yes", "vercel", "whoami"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    out = (result.stdout or "") + (result.stderr or "")
+    return result.returncode == 0 and "Logged out" not in out
+
+
 def deploy(*, fetch_quotes: bool = False) -> int:
     password, created = ensure_password()
     if created:
@@ -82,11 +93,15 @@ def deploy(*, fetch_quotes: bool = False) -> int:
             "--yes",
             "vercel",
             "deploy",
-            "--prod",
             "--yes",
             "-e",
             f"{PASSWORD_KEY}={password}",
         ]
+        if _logged_in():
+            cmd.append("--prod")
+        else:
+            cmd.append("--temporary")
+            print("vercel: not logged in; creating a temporary deployment you can claim")
         result = subprocess.run(cmd, cwd=tmp, env=env)
         return int(result.returncode)
 
