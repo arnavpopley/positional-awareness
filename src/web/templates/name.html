@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}{{ ticker.symbol }} · Positional Awareness{% endblock %}
+{% block body %}
+<p class="back"><a href="/">the book</a></p>
+<article class="name">
+  <header class="name-head">
+    <h2>{{ ticker.symbol }}</h2>
+    <span class="status status-{{ ticker.status }}">{{ ticker.status }}</span>
+  </header>
+  <dl class="facts">
+    <div><dt>qty</dt><dd>{{ qty }}</dd></div>
+    <div><dt>avg cost</dt><dd>{{ avg_cost }}</dd></div>
+    <div><dt>S</dt><dd>{{ S }}{% if band %} · {{ band }}{% endif %}{% if low_confidence %} · low_confidence{% endif %}</dd></div>
+    {% if next_event %}
+    <div><dt>next</dt><dd>{{ next_event }}</dd></div>
+    {% endif %}
+  </dl>
+
+  <section>
+    <h3>Thesis</h3>
+    <p class="thesis-full">{{ ticker.thesis or "(none)" }}</p>
+  </section>
+
+  <section>
+    <h3>Scorecard</h3>
+    <ul class="factors">
+      {% for name, value in factors %}
+      <li><span>{{ name }}</span> {{ value }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section>
+    <h3>Conditions</h3>
+    <h4>Quantitative</h4>
+    <ul>
+      {% for c in quantitative %}
+      <li>{{ c.text }} <span class="sev">{{ c.severity }}{% if c.kpi %} · {{ c.kpi }}{% endif %}{% if c.threshold %} · {{ c.threshold }}{% endif %}</span></li>
+      {% else %}
+      <li class="empty">(none)</li>
+      {% endfor %}
+    </ul>
+    <h4>Manual</h4>
+    <ul>
+      {% for c in manual %}
+      <li>{{ c.text }} <span class="sev">{{ c.severity }}{% if c.source %} · {{ c.source }}{% endif %}</span></li>
+      {% else %}
+      <li class="empty">(none)</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section>
+    <h3>Currently touched</h3>
+    <ul>
+      {% for row in touched %}
+      <li>{{ row["touched_at"] }} · {{ row["condition_text"] }} <span class="sev">{{ row["severity"] }} · {{ row["check_kind"] }}</span></li>
+      {% else %}
+      <li class="empty">(none)</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section>
+    <h3>Filings</h3>
+    <table class="filings">
+      <thead>
+        <tr><th>Date</th><th>Category</th><th>Headline</th><th>Filter</th></tr>
+      </thead>
+      <tbody>
+        {% for row in filings %}
+        <tr>
+          <td>{{ (row["filed_at"] or "—").split("T")[0] }}</td>
+          <td>{{ row["category"] }}{% if row["subcategory"] %} / {{ row["subcategory"] }}{% endif %}</td>
+          <td>{{ row["headline"] }}</td>
+          <td>{{ row["filter_status"] }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="empty">(none)</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h3>KPI history</h3>
+    {% for name, series in prints %}
+      <h4>{{ name }}</h4>
+      {% for row in series %}
+      <p class="print">{{ row["period"] }}: {{ row["value"] }}</p>
+      {% endfor %}
+    {% else %}
+    <p class="empty">(none)</p>
+    {% endfor %}
+  </section>
+
+  <section>
+    <h3>Decisions</h3>
+    <ul>
+      {% for row in decisions %}
+      <li>{{ (row["decided_at"] or "").split("T")[0] }} · {{ row["action"] }}{% if row["anticipatory"] %} · anticipatory{% endif %}{% if row["S_at_time"] is not none %} · S={{ row["S_at_time"] }}{% endif %}{% if row["note"] %} · {{ row["note"] }}{% endif %}</li>
+      {% else %}
+      <li class="empty">(none)</li>
+      {% endfor %}
+    </ul>
+  </section>
+</article>
+{% endblock %}

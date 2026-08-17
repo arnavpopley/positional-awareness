@@ -8,40 +8,9 @@ from src.context import context_command
 from src.ledger import LedgerError, Ticker, by_symbol, load_tickers
 from src.pack import pack_command
 from src.portfolio.base import Holding
-from src.portfolio.reconcile import reconcile, thesis_less_holdings
-from src.quotes import last_price, pct_return
+from src.portfolio.reconcile import reconcile
 from src.store import Store
-
-
-def _fmt_qty(qty: float) -> str:
-    if qty == int(qty):
-        return str(int(qty))
-    return f"{qty:.2f}"
-
-
-def _fmt_price(value: float | None) -> str:
-    if value is None:
-        return "—"
-    return f"{value:.2f}"
-
-
-def _fmt_ret(value: float | None) -> str:
-    if value is None:
-        return "—"
-    sign = "+" if value >= 0 else ""
-    return f"{sign}{value:.1f}%"
-
-
-def _fmt_s(value: float | None) -> str:
-    if value is None:
-        return "—"
-    return f"{value:+.2f}"
-
-
-def _table_order(tickers: list[Ticker]) -> list[Ticker]:
-    outstanding = [t for t in tickers if t.status == "no_thesis"]
-    rest = [t for t in tickers if t.status != "no_thesis"]
-    return outstanding + rest
+from src.view import book_rows
 
 
 def render_table(
@@ -54,33 +23,22 @@ def render_table(
     tickers = tickers if tickers is not None else load_tickers()
     store = store or Store()
     try:
-        cached = store.holdings_cache()
-        missing = len(thesis_less_holdings(tickers, cached)) + sum(
-            1 for t in tickers if t.status == "no_thesis"
-        )
-        rows: list[tuple[str, ...]] = []
+        missing, book = book_rows(tickers, store, fetch_quotes=fetch_quotes)
+        rows = [
+            (
+                row.symbol,
+                row.qty,
+                row.avg_cost,
+                row.last,
+                row.ret,
+                row.S,
+                row.band,
+                row.thesis,
+                row.next_event,
+            )
+            for row in book
+        ]
         headers = ("SYMBOL", "QTY", "AVG COST", "LAST", "RETURN", "S", "BAND", "THESIS", "NEXT")
-        for ticker in _table_order(tickers):
-            last = last_price(ticker) if fetch_quotes else None
-            score_row = store.latest_score(ticker.symbol)
-            s_val = None if score_row is None or score_row["S"] is None else float(score_row["S"])
-            band = "—" if score_row is None or not score_row["band"] else str(score_row["band"])
-            nxt = store.next_event(ticker.symbol) or (
-                f"Results due {ticker.results_due.isoformat()}" if ticker.results_due else "—"
-            )
-            rows.append(
-                (
-                    ticker.symbol,
-                    _fmt_qty(ticker.qty),
-                    _fmt_price(ticker.avg_cost),
-                    _fmt_price(last),
-                    _fmt_ret(pct_return(last, ticker.avg_cost)),
-                    _fmt_s(s_val),
-                    band,
-                    ticker.thesis_short(),
-                    nxt,
-                )
-            )
     finally:
         if own_store:
             store.close()
@@ -243,6 +201,14 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="also send a macOS notification for eligible packs",
     )
+    web = sub.add_parser("web", help="read-only local page on 127.0.0.1")
+    web.add_argument("--port", type=int, default=8787)
+    web.add_argument(
+        "--no-quotes",
+        action="store_true",
+        dest="web_no_quotes",
+        help="skip delayed quotes",
+    )
     args = parser.parse_args(argv)
     try:
         if args.command == "sync":
@@ -264,6 +230,13 @@ def main(argv: list[str] | None = None) -> int:
             return list_decisions_command(anticipatory=args.anticipatory)
         if args.command == "pack":
             return pack_command(args.symbol, notify=args.notify)
+        if args.command == "web":
+            from src.web.app import main as web_main
+
+            flags = ["--port", str(args.port)]
+            if args.web_no_quotes:
+                flags.append("--no-quotes")
+            return web_main(flags)
         print(render_table(fetch_quotes=not args.no_quotes))
         return 0
     except LedgerError as exc:

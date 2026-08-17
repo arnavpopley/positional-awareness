@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block body %}
+{% if missing %}
+<p class="notice">thesis-less holdings: {{ missing }}</p>
+{% endif %}
+<table class="book">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Status</th>
+      <th class="num">Qty</th>
+      <th class="num">Cost</th>
+      <th class="num">Last</th>
+      <th class="num">Return</th>
+      <th class="num">S</th>
+      <th>Band</th>
+      <th>Next</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>
+        <a class="sym" href="/t/{{ row.symbol }}">{{ row.symbol }}</a>
+        <p class="thesis">{{ row.thesis }}</p>
+      </td>
+      <td><span class="status status-{{ row.status }}">{{ row.status }}</span></td>
+      <td class="num">{{ row.qty }}</td>
+      <td class="num">{{ row.avg_cost }}</td>
+      <td class="num">{{ row.last }}</td>
+      <td class="num {% if row.ret_value is not none and row.ret_value > 0 %}up{% elif row.ret_value is not none and row.ret_value < 0 %}down{% endif %}">{{ row.ret }}</td>
+      <td class="num">{{ row.S }}</td>
+      <td class="band">{{ row.band }}</td>
+      <td class="next">{{ row.next_event }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

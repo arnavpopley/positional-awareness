@@ -5,7 +5,7 @@ Stay involved with holdings without re-learning the business. Spec is the source
 - **[SPEC.md](SPEC.md)** — locked product, scorecard, workflow, phases
 - **[BUILD_PROMPT.md](BUILD_PROMPT.md)** — paste this into a **new Agent chat** opened on this folder
 
-v1 is CLI + macOS notify. Telegram later. Gemini in Phase 1. Phase 0 has no LLM.
+v1 is CLI + macOS notify + a read-only localhost page. Telegram later. Never a public multi-user site.
 
 ## Fill in
 
@@ -29,7 +29,7 @@ uv sync --group dev
 | `uv run pos --no-quotes` | Same table, skip the quote fetch |
 | `uv run pos sync` | Read-only Groww holdings vs ledger. Uses API key + secret from `.env` (exchanges for a daily access token). Reports missing thesis / ledger `NO_THESIS` / not-held / qty-cost drift. Never writes the ledger. |
 | `uv run pos context SYMBOL [--filings N] [--since YYYY-MM-DD]` | Local markdown for one name. No network, no LLM. |
-| `uv run pos pack [SYMBOL] [--notify]` | Earnings pack: thesis, KPI to watch, last prints, S, confidence. No predicted beat. |
+| `uv run pos web` | Read-only local page at http://127.0.0.1:8787 (book + one name). Not a public site. |
 | `uv run pos decide SYMBOL ACTION [NOTE] [--anticipatory]` | Stamp a user decision. `--anticipatory` = ahead of a results print. |
 | `uv run pos decisions [--anticipatory]` | List stamped decisions. |
 | `uv run python -m src.main --once` | One poll of BSE for ledger names. First run stores silently; later runs notify **candidate** filings |

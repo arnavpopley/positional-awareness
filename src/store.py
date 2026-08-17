@@ -470,7 +470,8 @@ class Store:
     def latest_score(self, symbol: str) -> sqlite3.Row | None:
         return self.conn.execute(
             """
-            SELECT s.S, s.band, s.low_confidence
+            SELECT s.S, s.band, s.low_confidence, s.active_factors,
+                   s.x_kpi, s.x_book, s.x_industry, s.x_price, s.x_guidance
             FROM scores s
             JOIN filings f ON f.id = s.filing_id
             WHERE f.ticker = ?

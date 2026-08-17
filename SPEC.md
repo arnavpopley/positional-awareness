@@ -26,13 +26,13 @@ Expected cadence for ~10 names: glance at prints (~40/year, most no change); **a
 - Broker order placement (Groww/Kite). Read-only holdings via `pos sync` (cached). Ledger stays hand-edited. Never orders.
 - Live streaming prices, websockets, RSI/MACD stacks.
 - **Nifty-relative / excess-return alpha.** This book is allowed to diverge from the index. Price factor is the **name’s own move**.
-- Multi-user, auth, deploy-for-others.
+- Multi-user, auth, deploy-for-others. The page binds to localhost.
 - Predicted beats/misses. No “the model thinks the quarter will beat.”
 - Screening / stock discovery.
 - Twitter / broker-target / mood APIs.
 - Tuning scorecard weights in beta.
 - **Telegram in v1.** CLI + macOS notifications first. Telegram is a later push channel, not a blocker.
-- **Web UI in v1.** No FastAPI page until the pipe works.
+- Public or multi-user web app. A **read-only local page** (FastAPI, `127.0.0.1`) is allowed now that the poller works. Same ledger and SQLite as the CLI. No orders, no websockets, no live ticker.
 - NSE source unless a name is NSE-only (BSE covers dual-listed).
 - Local Ollama (16 GB M5; do not slow the laptop). Gemini API (key already exists). Groq+Llama optional fallback.
 
@@ -171,6 +171,7 @@ PDFs: download, `pdfplumber`. Near-empty text → `needs_manual_read`, still not
 ### 4. v1 surface
 
 - **CLI table:** name, return vs cost, last S, band, thesis, KPI series, next earnings date. `no_thesis` rows sit at the top. Thesis-less Groww holdings plus ledger `no_thesis` names count as outstanding (cache only, never the live API).
+- **Local page:** `pos web` — read-only FastAPI on `127.0.0.1`. Book table and one name’s thesis / conditions / S / filings / KPI history. Delayed quotes, not a live ticker. No auth, no orders.
 - **`pos sync`:** read-only Groww holdings vs ledger. Report drift and `NO_THESIS` ledger rows; do not write the ledger.
 - **`pos context <TICKER>`:** local markdown dump (thesis, conditions with severity, currently touched conditions, filings, KPI history, decisions) for pasting into an external chat. No LLM call, no network. `--filings N` and `--since YYYY-MM-DD`.
 - **`pos decide SYMBOL ACTION [NOTE] [--anticipatory]`:** user stamp into `decisions`. `--anticipatory` marks a decision made ahead of a results print. `pos decisions --anticipatory` lists only those.
@@ -236,10 +237,10 @@ Ship when: a board-meeting or results filing for a held ticker produces a macOS 
 - Gated industry RSS.
 - NSE for NSE-only names.
 
-**Phase 2 (only after a results season)**
+**Phase 2**
 
-- Optional read-only local page.
-- Weight review from `decisions` log. Still no ML.
+- Read-only local page (`pos web`, localhost). Same facts as the CLI.
+- Weight review from `decisions` log after a results season. Still no ML.
 
 ---
 
@@ -253,7 +254,7 @@ positional-awareness/
   BUILD_PROMPT.md
   config/tickers.yaml          # user-owned; example at tickers.example.yaml
   src/sources/{base.py,bse.py}
-  src/{filter.py,score.py,extract.py,notify.py,store.py,cli.py,main.py}
+  src/{filter.py,score.py,extract.py,notify.py,store.py,cli.py,main.py,web/}
   src/portfolio/{base.py,yaml_portfolio.py,groww.py,reconcile.py}
   data/                        # gitignored
   tests/                       # fixture JSON from a real BSE response
