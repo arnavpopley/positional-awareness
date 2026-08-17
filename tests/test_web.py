@@ -47,7 +47,6 @@ def _client(tmp_path: Path) -> TestClient:
     app = create_app(
         tickers=[ticker],
         store_factory=lambda: Store(db),
-        fetch_quotes=False,
     )
     return TestClient(app)
 
@@ -72,6 +71,18 @@ def test_name_page_shows_thesis_and_conditions(tmp_path: Path):
     assert "Why this position exists." in body
     assert "Order inflow stops growing" in body
     assert "Financial Results" in body
+
+
+def test_book_page_does_not_block_on_quotes(tmp_path: Path, monkeypatch):
+    def blocked(*args, **kwargs):
+        raise AssertionError("book page must not fetch quotes")
+
+    monkeypatch.setattr("src.view.last_price", blocked)
+    monkeypatch.setattr("src.quotes.last_price", blocked)
+    client = _client(tmp_path)
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "SUZLON" in response.text
 
 
 def test_unknown_name_is_404(tmp_path: Path):

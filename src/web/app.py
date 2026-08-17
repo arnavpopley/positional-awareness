@@ -10,8 +10,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from src.ledger import LedgerError, Ticker, by_symbol, load_tickers
+from src.quotes import last_price, pct_return
 from src.store import Store
-from src.view import book_rows, fmt_price, fmt_qty, fmt_s
+from src.view import book_rows, fmt_price, fmt_qty, fmt_ret, fmt_s
 
 HERE = Path(__file__).resolve().parent
 TEMPLATES = Jinja2Templates(directory=str(HERE / "templates"))
@@ -47,7 +48,7 @@ def create_app(
     *,
     tickers: list[Ticker] | None = None,
     store_factory: Callable[[], Store] | None = None,
-    fetch_quotes: bool = True,
+    defer_quotes: bool = True,
 ) -> FastAPI:
     """Read-only local page. Binds to localhost from `main`; never places a trade."""
     app = FastAPI(title="Positional Awareness", docs_url=None, redoc_url=None)
@@ -63,7 +64,7 @@ def create_app(
     def index(request: Request) -> HTMLResponse:
         store = _store()
         try:
-            missing, rows = book_rows(_book(), store, fetch_quotes=fetch_quotes)
+            missing, rows = book_rows(_book(), store, fetch_quotes=False)
         except LedgerError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
         finally:
@@ -71,8 +72,25 @@ def create_app(
         return TEMPLATES.TemplateResponse(
             request,
             "index.html",
-            {"missing": missing, "rows": rows},
+            {"missing": missing, "rows": rows, "defer_quotes": defer_quotes},
         )
+
+    @app.get("/api/quotes")
+    def api_quotes() -> dict[str, dict]:
+        import requests as req
+
+        sess = req.Session()
+        out: dict[str, dict] = {}
+        for ticker in _book():
+            last = last_price(ticker, sess, timeout=4)
+            ret = pct_return(last, ticker.avg_cost)
+            out[ticker.symbol] = {
+                "last": fmt_price(last),
+                "ret": fmt_ret(ret),
+                "up": ret is not None and ret > 0,
+                "down": ret is not None and ret < 0,
+            }
+        return out
 
     @app.get("/t/{symbol}", response_class=HTMLResponse)
     def name_page(request: Request, symbol: str) -> HTMLResponse:
@@ -135,7 +153,7 @@ def main(argv: list[str] | None = None) -> int:
     import uvicorn
 
     uvicorn.run(
-        create_app(fetch_quotes=not args.no_quotes),
+        create_app(defer_quotes=not args.no_quotes),
         host=args.host,
         port=args.port,
         log_level="info",

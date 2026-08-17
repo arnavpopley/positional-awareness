@@ -27,8 +27,8 @@
       <td><span class="status status-{{ row.status }}">{{ row.status }}</span></td>
       <td class="num">{{ row.qty }}</td>
       <td class="num">{{ row.avg_cost }}</td>
-      <td class="num">{{ row.last }}</td>
-      <td class="num {% if row.ret_value is not none and row.ret_value > 0 %}up{% elif row.ret_value is not none and row.ret_value < 0 %}down{% endif %}">{{ row.ret }}</td>
+      <td class="num" id="last-{{ row.symbol }}">{{ row.last }}</td>
+      <td class="num {% if row.ret_value is not none and row.ret_value > 0 %}up{% elif row.ret_value is not none and row.ret_value < 0 %}down{% endif %}" id="ret-{{ row.symbol }}">{{ row.ret }}</td>
       <td class="num">{{ row.S }}</td>
       <td class="band">{{ row.band }}</td>
       <td class="next">{{ row.next_event }}</td>
@@ -36,4 +36,7 @@
     {% endfor %}
   </tbody>
 </table>
+{% if defer_quotes %}
+<script src="/static/quotes.js"></script>
+{% endif %}
 {% endblock %}

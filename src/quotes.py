@@ -10,16 +10,24 @@ from src.sources.bse import HEADERS, HOME_URL, TIMEOUT
 QUOTE_URL = "https://api.bseindia.com/BseIndiaAPI/api/getScripHeaderData/w"
 
 
-def last_price(ticker: Ticker, session: requests.Session | None = None) -> float | None:
+def last_price(
+    ticker: Ticker,
+    session: requests.Session | None = None,
+    *,
+    timeout: float | None = None,
+) -> float | None:
     """Delayed public quote (BSE header). Not a live ticker. Not vs Nifty."""
+    if not ticker.bse_code:
+        return None
+    wait = TIMEOUT if timeout is None else timeout
     sess = session or requests.Session()
     sess.headers.update(HEADERS)
     try:
-        sess.get(HOME_URL, timeout=TIMEOUT)
+        sess.get(HOME_URL, timeout=wait)
         response = sess.get(
             QUOTE_URL,
             params={"Debtflag": "", "scripcode": ticker.bse_code, "seriesid": ""},
-            timeout=TIMEOUT,
+            timeout=wait,
         )
         response.raise_for_status()
         payload = response.json()
