@@ -134,9 +134,13 @@ def test_deploy_refuses_new_url_when_logged_out(monkeypatch, capsys):
     assert "--temporary" not in err
 
 
-def test_host_vercel_json_disables_git_autodeploy():
+def test_repo_root_disables_git_autodeploy():
     import json
+    from pathlib import Path
+
     from src.web.publish import HOST
 
-    cfg = json.loads((HOST / "vercel.json").read_text(encoding="utf-8"))
+    cfg = json.loads(Path("vercel.json").read_text(encoding="utf-8"))
     assert cfg["git"]["deploymentEnabled"] is False
+    host = json.loads((HOST / "vercel.json").read_text(encoding="utf-8"))
+    assert host["git"]["deploymentEnabled"] is False
