@@ -16,6 +16,11 @@
     <true/>
     <key>RunAtLoad</key>
     <true/>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+    </dict>
     <key>StandardOutPath</key>
     <string>REPO/data/poll.log</string>
     <key>StandardErrorPath</key>
