@@ -44,15 +44,16 @@ def test_publish_writes_full_thesis_and_login(tmp_path: Path):
     index = (dest / "index.html").read_text(encoding="utf-8")
     assert "Why this position exists." in index
     assert "pulse.js" not in index
-    assert "hosted snapshot" in index
+    assert "hosted · delayed Groww" in index
     assert "CMP" in index
-    assert "quotes.js" not in index
+    assert "quotes.js" in index
     login = (dest / "login.html").read_text(encoding="utf-8")
     assert 'action="/api/login"' in login
     assert "PA_SITE_PASSWORD" not in index
     assert "PA_SITE_PASSWORD" not in login
     name = (dest / "t" / "SUZLON.html").read_text(encoding="utf-8")
     assert "Order inflow stops growing" in name
+    assert "SUZLON" in (dest / "symbols.json").read_text(encoding="utf-8")
 
 
 def test_stage_deploy_copies_gate(tmp_path: Path):
@@ -106,7 +107,7 @@ def test_publish_bakes_groww_cmp(tmp_path: Path, monkeypatch):
     assert "+10.4%" in index
     assert "50.25" in name
     assert "+10.4%" in name
-    assert "quotes.js" not in index
+    assert "quotes.js" in index
 
 
 def test_site_password_is_sixteen_chars():

@@ -60,6 +60,7 @@ def name_context(
     *,
     hosted: bool = False,
     pulse: bool = True,
+    defer_quotes: bool = False,
     fetch_quotes: bool = False,
     prices: dict[str, float] | None = None,
 ) -> dict:
@@ -70,7 +71,7 @@ def name_context(
         [ticker], store, fetch_quotes=fetch_quotes, prices=prices
     )
     row = rows[0] if rows else None
-    ctx = flags(hosted=hosted, pulse=pulse, defer_quotes=False)
+    ctx = flags(hosted=hosted, pulse=pulse, defer_quotes=defer_quotes)
     ctx.update(
         {
             "ticker": ticker,

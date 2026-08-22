@@ -11,10 +11,8 @@ from fastapi.templating import Jinja2Templates
 
 from src.ledger import LedgerError, Ticker, by_symbol, load_tickers
 from src.paths import TICKERS_PATH
-from src.portfolio.groww import GrowwError, GrowwPortfolio
-from src.quotes import pct_return
 from src.store import Store
-from src.view import fmt_price, fmt_ret
+from src.web.book_quotes import book_quotes
 from src.web.render import index_context, name_context
 
 HERE = Path(__file__).resolve().parent
@@ -57,22 +55,7 @@ def create_app(
 
     @app.get("/api/quotes")
     def api_quotes() -> dict[str, dict]:
-        book = _book()
-        try:
-            prices = GrowwPortfolio().ltp_map(book)
-        except GrowwError:
-            prices = {}
-        out: dict[str, dict] = {}
-        for ticker in book:
-            last = prices.get(ticker.symbol)
-            ret = pct_return(last, ticker.avg_cost)
-            out[ticker.symbol] = {
-                "cmp": fmt_price(last),
-                "ret": fmt_ret(ret),
-                "up": ret is not None and ret > 0,
-                "down": ret is not None and ret < 0,
-            }
-        return out
+        return book_quotes(_book())
 
     @app.get("/api/pulse")
     def api_pulse() -> dict[str, int]:
@@ -94,7 +77,7 @@ def create_app(
         store = _store()
         try:
             ticker = by_symbol(_book(), symbol)
-            ctx = name_context(ticker, store, hosted=False, pulse=True)
+            ctx = name_context(ticker, store, hosted=False, pulse=True, defer_quotes=True)
         except LedgerError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         finally:

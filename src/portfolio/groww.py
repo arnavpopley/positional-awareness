@@ -84,6 +84,7 @@ class GrowwPortfolio(Portfolio):
         self._token = token
         self._timestamp = timestamp
         self._session = session or requests.Session()
+        self._access = ""
 
     def _secrets(self, *extra: str) -> tuple[str, ...]:
         return (self._api_key, self._api_secret, self._token, *extra)
@@ -120,10 +121,14 @@ class GrowwPortfolio(Portfolio):
         return _parse_access_token(payload)
 
     def _access_token(self) -> str:
+        if self._access:
+            return self._access
         if self._api_key and self._api_secret:
-            return self._exchange_access_token()
+            self._access = self._exchange_access_token()
+            return self._access
         if self._token:
-            return self._token
+            self._access = self._token
+            return self._access
         raise GrowwError("GROWW_API_KEY and GROWW_API_SECRET are missing")
 
     def fetch(self) -> list[Holding]:

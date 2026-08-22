@@ -1,8 +1,4 @@
-const { createHash } = require("crypto");
-
-function token(secret) {
-  return createHash("sha256").update("pa:" + secret).digest("hex");
-}
+const { token } = require("./auth");
 
 function parseBody(req) {
   return new Promise((resolve, reject) => {

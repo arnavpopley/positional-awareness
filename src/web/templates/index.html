@@ -25,8 +25,8 @@
         <p class="thesis">{{ row.thesis }}</p>
       </td>
       <td><span class="status status-{{ row.status }}">{{ row.status }}</span></td>
-      <td class="num">{{ row.qty }}</td>
-      <td class="num">{{ row.avg_cost }}</td>
+      <td class="num" id="qty-{{ row.symbol }}">{{ row.qty }}</td>
+      <td class="num" id="cost-{{ row.symbol }}">{{ row.avg_cost }}</td>
       <td class="num" id="cmp-{{ row.symbol }}">{{ row.cmp }}</td>
       <td class="num {% if row.ret_value is not none and row.ret_value > 0 %}up{% elif row.ret_value is not none and row.ret_value < 0 %}down{% endif %}" id="ret-{{ row.symbol }}">{{ row.ret }}</td>
       <td class="num">{{ row.S }}</td>
@@ -36,7 +36,4 @@
     {% endfor %}
   </tbody>
 </table>
-{% if defer_quotes %}
-<script src="/static/quotes.js"></script>
-{% endif %}
 {% endblock %}

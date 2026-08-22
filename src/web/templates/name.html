@@ -8,10 +8,10 @@
     <span class="status status-{{ ticker.status }}">{{ ticker.status }}</span>
   </header>
   <dl class="facts">
-    <div><dt>qty</dt><dd>{{ qty }}</dd></div>
-    <div><dt>avg cost</dt><dd>{{ avg_cost }}</dd></div>
-    <div><dt>CMP</dt><dd>{{ cmp }}</dd></div>
-    <div><dt>return</dt><dd{% if ret_value is not none and ret_value > 0 %} class="up"{% elif ret_value is not none and ret_value < 0 %} class="down"{% endif %}>{{ ret }}</dd></div>
+    <div><dt>qty</dt><dd id="qty-{{ ticker.symbol }}">{{ qty }}</dd></div>
+    <div><dt>avg cost</dt><dd id="cost-{{ ticker.symbol }}">{{ avg_cost }}</dd></div>
+    <div><dt>CMP</dt><dd id="cmp-{{ ticker.symbol }}">{{ cmp }}</dd></div>
+    <div><dt>return</dt><dd id="ret-{{ ticker.symbol }}"{% if ret_value is not none and ret_value > 0 %} class="up"{% elif ret_value is not none and ret_value < 0 %} class="down"{% endif %}>{{ ret }}</dd></div>
     <div><dt>S</dt><dd>{{ S }}{% if band %} · {{ band }}{% endif %}{% if low_confidence %} · low_confidence{% endif %}</dd></div>
     {% if next_event %}
     <div><dt>next</dt><dd>{{ next_event }}</dd></div>

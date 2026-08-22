@@ -72,7 +72,10 @@ def stage_deploy(dest: Path, *, fetch_quotes: bool = True) -> Path:
     api.mkdir()
     shutil.copy(HOST / "api" / "gate.js", api / "gate.js")
     shutil.copy(HOST / "api" / "login.js", api / "login.js")
+    shutil.copy(HOST / "api" / "auth.js", api / "auth.js")
+    shutil.copy(HOST / "api" / "quotes.js", api / "quotes.js")
     shutil.copy(site / "bundle.json", api / "bundle.json")
+    shutil.copy(site / "symbols.json", api / "symbols.json")
     shutil.copytree(site / "static", dest / "static")
     return dest
 
@@ -118,6 +121,9 @@ def deploy(*, fetch_quotes: bool = True, new_password: bool = False) -> int:
         stage_deploy(Path(tmp), fetch_quotes=fetch_quotes)
         env = os.environ.copy()
         env[PASSWORD_KEY] = password
+        load_dotenv(ENV_PATH)
+        groww_key = os.environ.get("GROWW_API_KEY") or ""
+        groww_secret = os.environ.get("GROWW_API_SECRET") or ""
         cmd = [
             "npx",
             "--yes",
@@ -130,6 +136,17 @@ def deploy(*, fetch_quotes: bool = True, new_password: bool = False) -> int:
             "-e",
             f"{PASSWORD_KEY}={password}",
         ]
+        if groww_key and groww_secret:
+            cmd.extend(
+                [
+                    "-e",
+                    f"GROWW_API_KEY={groww_key}",
+                    "-e",
+                    f"GROWW_API_SECRET={groww_secret}",
+                ]
+            )
+        else:
+            print("deploy: GROWW_API_KEY/SECRET missing; hosted book will not refresh")
         result = subprocess.run(cmd, cwd=tmp, env=env)
         return int(result.returncode)
 

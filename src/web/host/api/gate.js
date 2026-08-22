@@ -1,18 +1,6 @@
-const { createHash } = require("crypto");
+const { authorized } = require("./auth");
 const fs = require("fs");
 const path = require("path");
-
-function token(secret) {
-  return createHash("sha256").update("pa:" + secret).digest("hex");
-}
-
-function authorized(req) {
-  const secret = process.env.PA_SITE_PASSWORD || "";
-  if (!secret) return false;
-  const header = req.headers.cookie || "";
-  const match = header.match(/(?:^|; )pa_gate=([^;]*)/);
-  return Boolean(match && match[1] === token(secret));
-}
 
 function readBundle() {
   const file = path.join(__dirname, "bundle.json");

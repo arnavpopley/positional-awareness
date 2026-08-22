@@ -83,7 +83,7 @@ def test_book_page_does_not_block_on_quotes(tmp_path: Path, monkeypatch):
         raise AssertionError("book page must not fetch quotes")
 
     monkeypatch.setattr("src.view._cmp_prices", blocked)
-    monkeypatch.setattr("src.web.app.GrowwPortfolio.ltp_map", blocked)
+    monkeypatch.setattr("src.web.book_quotes.GrowwPortfolio.ltp_map", blocked)
     client = _client(tmp_path)
     response = client.get("/")
     assert response.status_code == 200
@@ -92,10 +92,12 @@ def test_book_page_does_not_block_on_quotes(tmp_path: Path, monkeypatch):
 
 
 def test_quotes_api_uses_groww_ltp(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("src.web.book_quotes.GrowwPortfolio.fetch", lambda self: [])
     monkeypatch.setattr(
-        "src.web.app.GrowwPortfolio.ltp_map",
+        "src.web.book_quotes.GrowwPortfolio.ltp_map",
         lambda self, tickers: {t.symbol: 50.25 for t in tickers},
     )
+    monkeypatch.setattr("src.web.book_quotes.last_price", lambda *args, **kwargs: None)
     client = _client(tmp_path)
     data = client.get("/api/quotes").json()
     assert data["SUZLON"]["cmp"] == "50.25"

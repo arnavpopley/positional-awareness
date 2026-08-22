@@ -44,10 +44,8 @@ def publish(
         if fetch_quotes:
             try:
                 prices = GrowwPortfolio().ltp_map(tickers)
-            except GrowwError as exc:
-                raise LedgerError(str(exc)) from exc
-            if tickers and not prices:
-                raise LedgerError("Groww CMP unavailable")
+            except GrowwError:
+                prices = {}
         dest.mkdir(parents=True, exist_ok=True)
         static_dest = dest / "static"
         if static_dest.exists():
@@ -63,7 +61,7 @@ def publish(
                 prices=prices,
                 hosted=True,
                 pulse=False,
-                defer_quotes=False,
+                defer_quotes=True,
             ),
         )
         names: dict[str, str] = {"/": index}
@@ -80,11 +78,25 @@ def publish(
                     hosted=True,
                     pulse=False,
                     prices=prices,
+                    defer_quotes=True,
                 ),
             )
             (pages / f"{ticker.symbol}.html").write_text(html, encoding="utf-8")
             names[f"/t/{ticker.symbol}"] = html
         (dest / "index.html").write_text(index, encoding="utf-8")
+        (dest / "symbols.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "symbol": ticker.symbol,
+                        "nse_symbol": ticker.nse_symbol or ticker.symbol,
+                    }
+                    for ticker in tickers
+                ],
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
         (dest / "bundle.json").write_text(
             json.dumps(names, ensure_ascii=False),
             encoding="utf-8",

@@ -8,7 +8,7 @@
 </head>
 <body>
   <header class="mast">
-    <p class="eyebrow">{% if hosted %}hosted snapshot · password · never places a trade{% else %}localhost · read only · never places a trade{% endif %}</p>
+    <p class="eyebrow">{% if hosted %}hosted · delayed Groww · password · never places a trade{% else %}localhost · delayed Groww · never places a trade{% endif %}</p>
     <h1><a href="/">Positional Awareness</a></h1>
     <p class="lede">Thesis and named KPIs on the row. You click Groww.</p>
   </header>
@@ -17,6 +17,9 @@
   </main>
   {% if pulse %}
   <script src="/static/pulse.js"></script>
+  {% endif %}
+  {% if defer_quotes %}
+  <script src="/static/quotes.js"></script>
   {% endif %}
 </body>
 </html>
